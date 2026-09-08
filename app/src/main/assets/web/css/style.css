@@ -155,6 +155,21 @@ body {
     transition: all 0.3s ease;
 }
 
+.brand-logo-img {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px var(--brand-glow), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border-highlight);
+    object-fit: cover;
+    background: #00030c;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.brand-logo-img:active {
+    transform: scale(0.92);
+}
+
 .brand-info {
     display: flex;
     flex-direction: column;
