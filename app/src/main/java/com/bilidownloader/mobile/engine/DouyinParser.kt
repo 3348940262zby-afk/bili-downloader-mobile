@@ -25,7 +25,7 @@ object DouyinParser {
     private var cachedTtwid: String? = null
     private var cachedTtwidTime: Long = 0
 
-    fun extractUrl(text: str): String? {
+    fun extractUrl(text: String): String? {
         val p = Pattern.compile("https?://(?:v\\.douyin\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_-]+\\.)?douyin\\.com/[^\\s]+|(?:www\\.)?iesdouyin\\.com/share/video/\\d+)")
         val m = p.matcher(text)
         return if (m.find()) m.group(0) else null
@@ -190,4 +190,3 @@ object DouyinParser {
         result
     }
 }
-typealias str = String
