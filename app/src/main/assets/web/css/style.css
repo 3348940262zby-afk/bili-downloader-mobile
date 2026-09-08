@@ -1,12 +1,15 @@
 :root {
-    --bg-base: #090a0f;
-    --bg-surface: #11141d;
-    --bg-elevated: #171b26;
-    --bg-interactive: #1f2535;
+    /* Obsidian Titanium Theme */
+    --bg-base: #0a0c10;
+    --bg-surface: #12151c;
+    --bg-surface-elevated: #181c26;
+    --bg-surface-glass: rgba(18, 21, 28, 0.78);
+    --bg-interactive: #1d222e;
+    --bg-interactive-hover: #242a3a;
     
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --border-hover: rgba(255, 255, 255, 0.14);
-    --border-focus: rgba(0, 168, 232, 0.45);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.16);
+    --border-focus: rgba(0, 168, 232, 0.5);
     
     --accent-bili: #00a8e8;
     --accent-bili-subtle: rgba(0, 168, 232, 0.12);
@@ -17,6 +20,7 @@
     
     --success: #10b981;
     --success-subtle: rgba(16, 185, 129, 0.12);
+    --warning: #f59e0b;
     --danger: #ef4444;
     --danger-subtle: rgba(239, 68, 68, 0.12);
     
@@ -27,10 +31,10 @@
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
-    --radius-xl: 20px;
+    --radius-xl: 22px;
     
-    --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    --shadow-modal: 0 20px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --shadow-card: 0 8px 32px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --shadow-popover: 0 24px 48px -12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -44,12 +48,12 @@
 body {
     background-color: var(--bg-base);
     color: var(--text-primary);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Segoe UI", Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Segoe UI", Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
-    padding-top: max(env(safe-area-inset-top), 16px);
+    padding-top: max(env(safe-area-inset-top), 14px);
     padding-bottom: max(env(safe-area-inset-bottom), 24px);
     min-height: 100vh;
 }
@@ -64,13 +68,13 @@ body {
 }
 
 /* ==========================================================================
-   Top App Bar
+   Top Navigation
    ========================================================================== */
 .top-nav {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 0 10px 0;
+    padding: 8px 0 6px 0;
 }
 
 .brand {
@@ -82,8 +86,8 @@ body {
 .logo-mark {
     width: 38px;
     height: 38px;
-    background: linear-gradient(135deg, rgba(0, 168, 232, 0.2), rgba(0, 168, 232, 0.05));
-    border: 1px solid rgba(0, 168, 232, 0.3);
+    background: linear-gradient(135deg, rgba(0, 168, 232, 0.22), rgba(0, 168, 232, 0.05));
+    border: 1px solid rgba(0, 168, 232, 0.28);
     border-radius: var(--radius-md);
     display: flex;
     align-items: center;
@@ -100,7 +104,7 @@ body {
 .app-title {
     font-size: 17px;
     font-weight: 700;
-    letter-spacing: -0.4px;
+    letter-spacing: -0.3px;
     color: var(--text-primary);
     line-height: 1.2;
 }
@@ -115,17 +119,17 @@ body {
 .pill-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     color: var(--text-secondary);
     font-size: 12px;
     font-weight: 500;
-    padding: 6px 12px;
+    padding: 6px 13px;
     border-radius: 9999px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .pill-btn:active {
@@ -144,11 +148,11 @@ body {
 
 .status-indicator.active {
     background: var(--success);
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
 }
 
 /* ==========================================================================
-   Cards Common
+   Cards General
    ========================================================================== */
 .card {
     background: var(--bg-surface);
@@ -156,7 +160,7 @@ body {
     border-radius: var(--radius-xl);
     padding: 16px;
     box-shadow: var(--shadow-card);
-    transition: border-color 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .section-label {
@@ -167,7 +171,7 @@ body {
 }
 
 /* ==========================================================================
-   Input / Search Area
+   Input Section
    ========================================================================== */
 .input-header {
     display: flex;
@@ -220,7 +224,7 @@ body {
     background: var(--bg-base);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    transition: all 0.25s ease;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .input-box:focus-within {
@@ -290,7 +294,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     border: none;
-    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     outline: none;
 }
 
@@ -317,13 +321,13 @@ body {
 
 .btn-primary {
     flex: 1.3;
-    background: var(--accent-bili);
+    background: #0077fa;
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(0, 168, 232, 0.25);
+    box-shadow: 0 4px 14px rgba(0, 119, 250, 0.28);
 }
 
 .btn-primary:active:not(:disabled) {
-    background: #0098d3;
+    background: #006ae0;
 }
 
 .btn-sm {
@@ -334,18 +338,19 @@ body {
 
 .btn-download {
     width: 100%;
-    background: #0077fa;
+    background: linear-gradient(135deg, #0077fa, #00a8e8);
     color: #ffffff;
     padding: 13px;
     font-size: 14.5px;
     font-weight: 600;
     margin-top: 14px;
     border-radius: var(--radius-md);
-    box-shadow: 0 4px 16px rgba(0, 119, 250, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 119, 250, 0.35);
 }
 
 .btn-download:active:not(:disabled) {
-    background: #006ae0;
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(0, 119, 250, 0.25);
 }
 
 /* ==========================================================================
@@ -355,7 +360,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .preview-media-container {
@@ -378,7 +383,7 @@ body {
 .media-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.6) 0%, transparent 60%);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, transparent 60%);
     pointer-events: none;
 }
 
@@ -387,7 +392,8 @@ body {
     bottom: 10px;
     right: 10px;
     background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     font-size: 11px;
     font-weight: 600;
     color: #fff;
@@ -401,7 +407,8 @@ body {
     top: 10px;
     left: 10px;
     background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     font-size: 11px;
     font-weight: 600;
     padding: 3px 8px;
@@ -595,7 +602,7 @@ body {
 }
 
 .status-downloading { color: var(--accent-bili); }
-.status-merging { color: #f59e0b; }
+.status-merging { color: var(--warning); }
 .status-completed { color: var(--success); }
 .status-failed { color: var(--danger); }
 
@@ -619,7 +626,7 @@ body {
     height: 100%;
     background: linear-gradient(90deg, #0077fa, var(--accent-bili));
     width: 0%;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     border-radius: 9999px;
 }
 
@@ -650,6 +657,7 @@ body {
     inset: 0;
     background: rgba(0, 0, 0, 0.72);
     backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
 }
 
 .modal-card {
@@ -662,7 +670,7 @@ body {
     max-width: 350px;
     z-index: 1001;
     text-align: center;
-    box-shadow: var(--shadow-modal);
+    box-shadow: var(--shadow-popover);
 }
 
 .modal-header {
@@ -748,31 +756,32 @@ body {
 }
 
 /* ==========================================================================
-   Toast Notification
+   Dynamic Island Floating Toast
    ========================================================================== */
 .toast {
     position: fixed;
     top: max(env(safe-area-inset-top), 16px);
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(18, 21, 29, 0.94);
+    background: rgba(22, 26, 35, 0.94);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
     color: var(--text-primary);
-    padding: 8px 16px;
+    padding: 9px 18px;
     border-radius: 9999px;
     font-size: 12.5px;
     font-weight: 500;
     z-index: 2000;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
     white-space: nowrap;
     pointer-events: none;
-    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .toast.hidden {
     opacity: 0;
-    transform: translate(-50%, -10px);
+    transform: translate(-50%, -12px);
     pointer-events: none;
 }
 

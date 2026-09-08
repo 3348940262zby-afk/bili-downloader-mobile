@@ -141,15 +141,21 @@ class DownloadService : Service() {
             updateNotification(task.title, "写入手机系统相册...", 98)
             notifyTaskUpdated(task)
 
-            val savedUri = GalleryHelper.saveVideoToGallery(this@DownloadService, tempMergedFile, "$safeTitle.mp4")
+            val isAudioOnly = !hasAudioStream && (task.title.contains("音频") || task.title.contains("audio", ignoreCase = true) || task.videoUrl.contains("audio"))
+            val savedUri = if (isAudioOnly) {
+                GalleryHelper.saveAudioToGallery(this@DownloadService, tempMergedFile, "$safeTitle.m4a")
+            } else {
+                GalleryHelper.saveVideoToGallery(this@DownloadService, tempMergedFile, "$safeTitle.mp4")
+            }
             if (savedUri != null) {
                 task.status = "completed"
                 task.progress = 100
-                updateNotification(task.title, "下载完成，已存入相册！", 100)
+                val msg = if (isAudioOnly) "下载完成，已存入音乐库！" else "下载完成，已存入相册！"
+                updateNotification(task.title, msg, 100)
                 notifyTaskUpdated(task)
             } else {
                 task.status = "failed"
-                task.errorMessage = "写入系统相册失败"
+                task.errorMessage = "写入系统媒体库失败"
                 notifyTaskUpdated(task)
             }
 

@@ -14,7 +14,9 @@ object MediaParserDispatcher {
         }
         if (s.contains("bilibili.com") || s.contains("b23.tv") || s.contains("bili2233.cn") || 
             Regex("(?i)BV[a-zA-Z0-9]{10}").containsMatchIn(input) || 
-            Regex("(?i)\\bav\\d+\\b").containsMatchIn(input)) {
+            Regex("(?i)\\bav\\d+\\b").containsMatchIn(input) ||
+            Regex("(?i)\\bep\\d+\\b").containsMatchIn(input) ||
+            Regex("(?i)\\bss\\d+\\b").containsMatchIn(input)) {
             return "bilibili"
         }
         return "unknown"

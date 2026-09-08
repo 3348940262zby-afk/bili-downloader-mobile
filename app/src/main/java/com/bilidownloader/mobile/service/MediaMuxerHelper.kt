@@ -70,7 +70,9 @@ object MediaMuxerHelper {
 
             // 1. Write video samples
             videoExtractor.selectTrack(videoTrackIndex)
-            val totalDuration = videoFormat.getLong(MediaFormat.KEY_DURATION)
+            val totalDuration = if (videoFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                try { videoFormat.getLong(MediaFormat.KEY_DURATION) } catch (e: Exception) { 0L }
+            } else 0L
             while (true) {
                 bufferInfo.offset = 0
                 bufferInfo.size = videoExtractor.readSampleData(buffer, 0)

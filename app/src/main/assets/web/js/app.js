@@ -46,7 +46,7 @@ function detectPlatform(text) {
     if (s.includes('douyin.com') || s.includes('iesdouyin.com')) return 'douyin';
     if (s.includes('kuaishou.com') || s.includes('gifshow.com')) return 'kuaishou';
     if (s.includes('bilibili.com') || s.includes('b23.tv') || s.includes('bili2233.cn') || 
-        /bv[a-za-z0-9]{10}/i.test(s) || /\bav\d+\b/i.test(s)) return 'bilibili';
+        /bv[a-za-z0-9]{10}/i.test(s) || /\bav\d+\b/i.test(s) || /\bep\d+\b/i.test(s) || /\bss\d+\b/i.test(s)) return 'bilibili';
     return null;
 }
 

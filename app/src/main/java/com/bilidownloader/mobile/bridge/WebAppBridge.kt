@@ -27,6 +27,15 @@ class WebAppBridge(
     private val gson = Gson()
     private val prefs = context.getSharedPreferences("bili_downloader_prefs", Context.MODE_PRIVATE)
 
+    private fun escapeForJs(json: String): String {
+        return json.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+    }
+
     @JavascriptInterface
     fun parseUrl(input: String) {
         scope.launch {
@@ -35,7 +44,7 @@ class WebAppBridge(
                 MediaParserDispatcher.parse(input, cookies)
             }
             val jsonStr = gson.toJson(result)
-            val escaped = jsonStr.replace("\\", "\\\\").replace("'", "\\'")
+            val escaped = escapeForJs(jsonStr)
             webView.evaluateJavascript("javascript:window.onParseResult('$escaped')", null)
         }
     }
@@ -62,7 +71,8 @@ class WebAppBridge(
             if (service != null) {
                 service.addTask(task)
                 Toast.makeText(context, "已加入下载队列: $title", Toast.LENGTH_SHORT).show()
-                webView.evaluateJavascript("javascript:window.onTaskAdded('$id', '$title')", null)
+                val safeTitle = escapeForJs(title)
+                webView.evaluateJavascript("javascript:window.onTaskAdded('$id', '$safeTitle')", null)
             } else {
                 Toast.makeText(context, "下载服务未就绪，请稍后重试", Toast.LENGTH_SHORT).show()
             }
@@ -88,7 +98,7 @@ class WebAppBridge(
         scope.launch {
             val res = BiliParser.generateQrCode()
             val jsonStr = gson.toJson(res)
-            val escaped = jsonStr.replace("\\", "\\\\").replace("'", "\\'")
+            val escaped = escapeForJs(jsonStr)
             webView.evaluateJavascript("javascript:window.onQrCodeResult('$escaped')", null)
         }
     }
@@ -102,7 +112,7 @@ class WebAppBridge(
                 prefs.edit().putString("bili_cookies", cookies).apply()
             }
             val jsonStr = gson.toJson(res)
-            val escaped = jsonStr.replace("\\", "\\\\").replace("'", "\\'")
+            val escaped = escapeForJs(jsonStr)
             webView.evaluateJavascript("javascript:window.onQrPollResult('$escaped')", null)
         }
     }

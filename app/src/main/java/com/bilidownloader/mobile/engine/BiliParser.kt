@@ -28,16 +28,99 @@ object BiliParser {
 
     private val gson = Gson()
 
+    private suspend fun resolveAidToBvid(aid: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("https://api.bilibili.com/x/web-interface/view?aid=$aid")
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", REFERER)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: ""
+                val json = gson.fromJson(body, JsonObject::class.java)
+                if (json.get("code")?.asInt == 0) {
+                    return@withContext json.getAsJsonObject("data")?.get("bvid")?.asString
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        null
+    }
+
+    private suspend fun resolveEpToBvid(epId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("https://api.bilibili.com/pgc/view/web/season?ep_id=$epId")
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", REFERER)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: ""
+                val json = gson.fromJson(body, JsonObject::class.java)
+                if (json.get("code")?.asInt == 0) {
+                    val result = json.getAsJsonObject("result")
+                    val eps = result?.getAsJsonArray("episodes")
+                    if (eps != null && eps.size() > 0) {
+                        for (ep in eps) {
+                            if (ep.isJsonObject) {
+                                val epObj = ep.asJsonObject
+                                if (epObj.get("id")?.asString == epId) {
+                                    val bvid = epObj.get("bvid")?.asString
+                                    if (!bvid.isNullOrEmpty()) return@withContext bvid
+                                }
+                            }
+                        }
+                        val firstEp = eps.get(0).asJsonObject
+                        return@withContext firstEp.get("bvid")?.asString
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        null
+    }
+
+    private suspend fun resolveSeasonToBvid(seasonId: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("https://api.bilibili.com/pgc/view/web/season?season_id=$seasonId")
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", REFERER)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                val body = resp.body?.string() ?: ""
+                val json = gson.fromJson(body, JsonObject::class.java)
+                if (json.get("code")?.asInt == 0) {
+                    val result = json.getAsJsonObject("result")
+                    val eps = result?.getAsJsonArray("episodes")
+                    if (eps != null && eps.size() > 0) {
+                        val firstEp = eps.get(0).asJsonObject
+                        return@withContext firstEp.get("bvid")?.asString
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        null
+    }
+
     suspend fun resolveBvid(input: String): String? = withContext(Dispatchers.IO) {
         val trimmed = input.trim()
         val bvPattern = Pattern.compile("(?i)(BV[a-zA-Z0-9]{10})")
+        val avPattern = Pattern.compile("(?i)\\bav(\\d+)\\b")
+        val epPattern = Pattern.compile("(?i)\\bep(\\d+)\\b")
+        val ssPattern = Pattern.compile("(?i)\\bss(\\d+)\\b")
+
         val matcher = bvPattern.matcher(trimmed)
         if (matcher.find()) {
             return@withContext matcher.group(1)
         }
 
-        // Handle b23.tv shortlink (e.g. https://b23.tv/nNqA5nY)
-        val shortLinkPattern = Pattern.compile("(?:https?://)?b23\\.tv/([a-zA-Z0-9]+)")
+        // Handle b23.tv / bili2233.cn shortlink (e.g. https://b23.tv/nNqA5nY)
+        val shortLinkPattern = Pattern.compile("(?i)(?:https?://)?(?:b23\\.tv|bili2233\\.cn)/([a-zA-Z0-9]+)")
         val shortMatcher = shortLinkPattern.matcher(trimmed)
         if (shortMatcher.find()) {
             val code = shortMatcher.group(1)
@@ -60,6 +143,21 @@ object BiliParser {
                         if (m2.find()) {
                             return@withContext m2.group(1)
                         }
+                        val mAv = avPattern.matcher(loc)
+                        if (mAv.find()) {
+                            val bvid = resolveAidToBvid(mAv.group(1))
+                            if (bvid != null) return@withContext bvid
+                        }
+                        val mEp = epPattern.matcher(loc)
+                        if (mEp.find()) {
+                            val bvid = resolveEpToBvid(mEp.group(1))
+                            if (bvid != null) return@withContext bvid
+                        }
+                        val mSs = ssPattern.matcher(loc)
+                        if (mSs.find()) {
+                            val bvid = resolveSeasonToBvid(mSs.group(1))
+                            if (bvid != null) return@withContext bvid
+                        }
                         currentUrl = if (loc.startsWith("http")) loc else "https://$loc"
                         redirectCount++
                     } else {
@@ -69,6 +167,16 @@ object BiliParser {
                             val m3 = bvPattern.matcher(finalUrl)
                             if (m3.find()) {
                                 return@withContext m3.group(1)
+                            }
+                            val mAv = avPattern.matcher(finalUrl)
+                            if (mAv.find()) {
+                                val bvid = resolveAidToBvid(mAv.group(1))
+                                if (bvid != null) return@withContext bvid
+                            }
+                            val mEp = epPattern.matcher(finalUrl)
+                            if (mEp.find()) {
+                                val bvid = resolveEpToBvid(mEp.group(1))
+                                if (bvid != null) return@withContext bvid
                             }
                         }
                         break
@@ -81,26 +189,27 @@ object BiliParser {
         }
 
         // Handle av id (e.g. av170001 or av 123456)
-        val avPattern = Pattern.compile("(?i)\\bav(\\d+)\\b")
         val avMatcher = avPattern.matcher(trimmed)
         if (avMatcher.find()) {
             val aid = avMatcher.group(1)
-            try {
-                val req = Request.Builder()
-                    .url("https://api.bilibili.com/x/web-interface/view?aid=$aid")
-                    .header("User-Agent", USER_AGENT)
-                    .header("Referer", REFERER)
-                    .build()
-                client.newCall(req).execute().use { resp ->
-                    val body = resp.body?.string() ?: ""
-                    val json = gson.fromJson(body, JsonObject::class.java)
-                    if (json.get("code")?.asInt == 0) {
-                        return@withContext json.getAsJsonObject("data")?.get("bvid")?.asString
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            val bvid = resolveAidToBvid(aid)
+            if (bvid != null) return@withContext bvid
+        }
+
+        // Handle ep id (Bangumi Episode)
+        val epMatcher = epPattern.matcher(trimmed)
+        if (epMatcher.find()) {
+            val epId = epMatcher.group(1)
+            val bvid = resolveEpToBvid(epId)
+            if (bvid != null) return@withContext bvid
+        }
+
+        // Handle ss id (Bangumi Season)
+        val ssMatcher = ssPattern.matcher(trimmed)
+        if (ssMatcher.find()) {
+            val ssId = ssMatcher.group(1)
+            val bvid = resolveSeasonToBvid(ssId)
+            if (bvid != null) return@withContext bvid
         }
 
         null

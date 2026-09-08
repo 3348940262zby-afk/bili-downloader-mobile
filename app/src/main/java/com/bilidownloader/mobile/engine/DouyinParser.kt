@@ -21,12 +21,19 @@ object DouyinParser {
         .followRedirects(true)
         .build()
 
+    private val noRedirectClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     private val gson = Gson()
     private var cachedTtwid: String? = null
     private var cachedTtwidTime: Long = 0
 
     fun extractUrl(text: String): String? {
-        val p = Pattern.compile("https?://(?:v\\.douyin\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_.-]+\\.)?(?:douyin|iesdouyin)\\.com/[^\\s，,、\"'<>]+)")
+        val p = Pattern.compile("https?://(?:v\\.douyin\\.com/[a-zA-Z0-9_/-]+|(?:[a-zA-Z0-9_.-]+\\.)?(?:douyin|iesdouyin)\\.com/[a-zA-Z0-9_.~:/?#\\[\\]@!$&'()*+,;=%-]+)")
         val m = p.matcher(text)
         return if (m.find()) m.group(0) else null
     }
@@ -99,23 +106,47 @@ object DouyinParser {
                     .header("User-Agent", MOBILE_UA)
                     .build()
 
-                client.newCall(headReq).execute().use { resp ->
-                    finalUrl = resp.request.url.toString()
-                }
+                try {
+                    noRedirectClient.newCall(headReq).execute().use { resp ->
+                        val loc = resp.header("Location")
+                        if (!loc.isNullOrBlank()) {
+                            val lm = videoP.matcher(loc)
+                            if (lm.find()) itemId = lm.group(1)
+                            if (itemId == null) {
+                                val nm = noteP.matcher(loc)
+                                if (nm.find()) itemId = nm.group(1)
+                            }
+                            if (itemId == null) {
+                                val mm = modalP.matcher(loc)
+                                if (mm.find()) itemId = mm.group(1)
+                            }
+                            if (itemId == null) {
+                                val dm = digitP.matcher(loc)
+                                if (dm.find()) itemId = dm.group(1)
+                            }
+                        }
+                    }
+                } catch (ignored: Exception) {}
 
-                vm = videoP.matcher(finalUrl)
-                if (vm.find()) itemId = vm.group(1)
                 if (itemId == null) {
-                    val nm = noteP.matcher(finalUrl)
-                    if (nm.find()) itemId = nm.group(1)
-                }
-                if (itemId == null) {
-                    val mm = modalP.matcher(finalUrl)
-                    if (mm.find()) itemId = mm.group(1)
-                }
-                if (itemId == null) {
-                    val dm = digitP.matcher(finalUrl)
-                    if (dm.find()) itemId = dm.group(1)
+                    client.newCall(headReq).execute().use { resp ->
+                        finalUrl = resp.request.url.toString()
+                    }
+
+                    vm = videoP.matcher(finalUrl)
+                    if (vm.find()) itemId = vm.group(1)
+                    if (itemId == null) {
+                        val nm = noteP.matcher(finalUrl)
+                        if (nm.find()) itemId = nm.group(1)
+                    }
+                    if (itemId == null) {
+                        val mm = modalP.matcher(finalUrl)
+                        if (mm.find()) itemId = mm.group(1)
+                    }
+                    if (itemId == null) {
+                        val dm = digitP.matcher(finalUrl)
+                        if (dm.find()) itemId = dm.group(1)
+                    }
                 }
             }
 
@@ -209,6 +240,19 @@ object DouyinParser {
                                 val playList = videoObj.getAsJsonObject("play_addr")?.getAsJsonArray("url_list")
                                 if (playList != null && playList.size() > 0) {
                                     videoUrl = playList.get(0).asString.replace("playwm", "play")
+                                }
+                            }
+
+                            // Check images/images_list for note/photo gallery posts
+                            if (videoUrl == null && videoData.has("images")) {
+                                val imagesArr = videoData.getAsJsonArray("images")
+                                if (imagesArr != null && imagesArr.size() > 0 && imagesArr.get(0).isJsonObject) {
+                                    val firstImg = imagesArr.get(0).asJsonObject
+                                    val urlList = firstImg.getAsJsonArray("url_list")
+                                    if (urlList != null && urlList.size() > 0) {
+                                        coverUrl = urlList.get(0).asString
+                                        videoUrl = urlList.get(0).asString
+                                    }
                                 }
                             }
                         }
