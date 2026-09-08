@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">BiliDownloader</string>
+    <string name="download_channel_name">下载服务通知</string>
+    <string name="download_channel_desc">显示视频下载进度与完成提醒</string>
+</resources>
