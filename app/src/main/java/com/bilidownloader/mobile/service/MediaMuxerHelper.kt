@@ -64,7 +64,7 @@ object MediaMuxerHelper {
             val muxerAudioTrack = muxer.addTrack(audioFormat)
             muxer.start()
 
-            val bufferSize = 2 * 1024 * 1024 // 2MB buffer
+            val bufferSize = 4 * 1024 * 1024 // 4MB buffer for 4K high-bitrate media
             val buffer = ByteBuffer.allocate(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
 

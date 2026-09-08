@@ -19,6 +19,13 @@ object BiliParser {
         .followRedirects(true)
         .build()
 
+    private val noRedirectClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     private val gson = Gson()
 
     suspend fun resolveBvid(input: String): String? = withContext(Dispatchers.IO) {
@@ -29,27 +36,73 @@ object BiliParser {
             return@withContext matcher.group(1)
         }
 
-        // Handle b23.tv shortlink
-        val shortLinkPattern = Pattern.compile("https?://b23\\.tv/[a-zA-Z0-9]+")
+        // Handle b23.tv shortlink (e.g. https://b23.tv/nNqA5nY)
+        val shortLinkPattern = Pattern.compile("(?:https?://)?b23\\.tv/([a-zA-Z0-9]+)")
         val shortMatcher = shortLinkPattern.matcher(trimmed)
         if (shortMatcher.find()) {
-            val url = shortMatcher.group(0)
+            val code = shortMatcher.group(1)
+            var currentUrl = "https://b23.tv/$code"
+            var redirectCount = 0
+            while (redirectCount < 4) {
+                try {
+                    val req = Request.Builder()
+                        .url(currentUrl)
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", REFERER)
+                        .build()
+
+                    val resp = noRedirectClient.newCall(req).execute()
+                    val loc = resp.header("Location")
+                    resp.close()
+
+                    if (!loc.isNullOrBlank()) {
+                        val m2 = bvPattern.matcher(loc)
+                        if (m2.find()) {
+                            return@withContext m2.group(1)
+                        }
+                        currentUrl = if (loc.startsWith("http")) loc else "https://$loc"
+                        redirectCount++
+                    } else {
+                        // Not a redirect, try normal client as fallback
+                        client.newCall(req).execute().use { fullResp ->
+                            val finalUrl = fullResp.request.url.toString()
+                            val m3 = bvPattern.matcher(finalUrl)
+                            if (m3.find()) {
+                                return@withContext m3.group(1)
+                            }
+                        }
+                        break
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    break
+                }
+            }
+        }
+
+        // Handle av id (e.g. av170001 or av 123456)
+        val avPattern = Pattern.compile("(?i)\\bav(\\d+)\\b")
+        val avMatcher = avPattern.matcher(trimmed)
+        if (avMatcher.find()) {
+            val aid = avMatcher.group(1)
             try {
                 val req = Request.Builder()
-                    .url(url)
+                    .url("https://api.bilibili.com/x/web-interface/view?aid=$aid")
                     .header("User-Agent", USER_AGENT)
+                    .header("Referer", REFERER)
                     .build()
                 client.newCall(req).execute().use { resp ->
-                    val finalUrl = resp.request.url.toString()
-                    val m2 = bvPattern.matcher(finalUrl)
-                    if (m2.find()) {
-                        return@withContext m2.group(1)
+                    val body = resp.body?.string() ?: ""
+                    val json = gson.fromJson(body, JsonObject::class.java)
+                    if (json.get("code")?.asInt == 0) {
+                        return@withContext json.getAsJsonObject("data")?.get("bvid")?.asString
                     }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+
         null
     }
 

@@ -3,51 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>BiliDownloader Mobile</title>
+    <title>BiliDownloader</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <div id="toast" class="toast hidden"></div>
+
     <div class="app-container">
-        <!-- Header -->
+        <!-- Top App Bar -->
         <header class="top-nav">
             <div class="brand">
-                <div class="logo-circle">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="#00A1D6">
-                        <path d="M19.35,10.04C18.67,6.59 15.64,4 12,4 9.11,4 6.6,5.64 5.35,8.04 2.34,8.36 0,10.91 0,14c0,3.31 2.69,6 6,6h13c2.76,0 5,-2.24 5,-5 0,-2.64 -2.05,-4.78 -4.65,-4.96zM17,13l-5,5 -5,-5h3V9h4v4h3z"/>
+                <div class="logo-mark">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                 </div>
-                <div class="brand-text">
-                    <h1>BiliDownloader</h1>
-                    <span class="badge-sub">Mobile · Android 16</span>
+                <div class="brand-info">
+                    <h1 class="app-title">BiliDownloader</h1>
+                    <p class="app-subtitle">多平台高清媒体提取</p>
                 </div>
             </div>
-            <div class="actions">
-                <button id="btn-login" class="icon-btn" title="B站账号登录">
+
+            <div class="nav-actions">
+                <button id="btn-login" class="pill-btn" title="B站账号状态">
+                    <span class="status-indicator"></span>
                     <span id="user-status-text">登录B站</span>
                 </button>
             </div>
         </header>
 
-        <!-- Main Content -->
+        <!-- Main Workspace -->
         <main class="content">
-            <!-- Input Card -->
+            <!-- Search / Input Card -->
             <section class="card input-card">
-                <div class="card-header">
-                    <span class="card-title">视频链接解析</span>
-                    <span id="platform-badge" class="platform-badge hidden">未知平台</span>
+                <div class="input-header">
+                    <span class="section-label">媒体链接</span>
+                    <div id="platform-badge" class="platform-badge hidden">
+                        <span class="platform-dot"></span>
+                        <span id="platform-badge-text">未知平台</span>
+                    </div>
                 </div>
-                <div class="input-wrapper">
-                    <textarea id="url-input" placeholder="粘贴 B站、抖音、快手 的分享链接或视频地址..." rows="3"></textarea>
-                </div>
-                <div class="btn-group">
-                    <button id="btn-paste" class="btn btn-secondary">
+
+                <div class="input-box">
+                    <textarea id="url-input" placeholder="输入或粘贴 B站、抖音、快手 的视频地址或分享文案..." rows="3" spellcheck="false"></textarea>
+                    <button id="btn-clear" class="clear-btn hidden" title="清空内容">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                            <path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/>
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                         </svg>
-                        读取剪贴板
+                    </button>
+                </div>
+
+                <div class="action-toolbar">
+                    <button id="btn-paste" class="btn btn-secondary">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                        </svg>
+                        <span>读取剪贴板</span>
                     </button>
                     <button id="btn-parse" class="btn btn-primary">
                         <span id="parse-spinner" class="spinner hidden"></span>
+                        <svg id="parse-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
                         <span id="parse-text">开始解析</span>
                     </button>
                 </div>
@@ -55,42 +75,71 @@
 
             <!-- Video Preview Card -->
             <section id="preview-card" class="card preview-card hidden">
-                <div class="preview-media">
-                    <img id="preview-cover" src="" alt="封面">
-                    <div id="preview-duration" class="duration-badge">00:00</div>
+                <div class="preview-media-container">
+                    <img id="preview-cover" src="" alt="封面" loading="lazy">
+                    <div class="media-overlay"></div>
+                    <div id="preview-duration" class="duration-pill">00:00</div>
+                    <span id="preview-platform" class="platform-tag">Bilibili</span>
                 </div>
-                <div class="preview-info">
-                    <h3 id="preview-title">视频标题</h3>
-                    <div class="meta-row">
-                        <span id="preview-author" class="author">UP主/作者</span>
-                        <span id="preview-platform" class="tag">Bilibili</span>
+
+                <div class="preview-details">
+                    <h2 id="preview-title" class="video-title">视频标题</h2>
+                    
+                    <div class="author-row">
+                        <div class="author-icon">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                            </svg>
+                        </div>
+                        <span id="preview-author" class="author-name">创作者</span>
                     </div>
 
-                    <!-- Quality selector -->
-                    <div class="quality-selector-box">
-                        <label for="quality-select">选择下载画质：</label>
-                        <select id="quality-select" class="quality-select">
-                            <!-- Populated dynamically -->
-                        </select>
+                    <div class="quality-section">
+                        <label for="quality-select" class="field-label">选择导出画质 / 格式</label>
+                        <div class="select-wrapper">
+                            <select id="quality-select" class="custom-select">
+                                <!-- Populated dynamically -->
+                            </select>
+                            <div class="select-arrow">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
 
                     <button id="btn-download" class="btn btn-download">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
-                        下载并保存到系统相册
+                        <span>下载并保存至系统相册</span>
                     </button>
                 </div>
             </section>
 
-            <!-- Tasks Card -->
+            <!-- Tasks Queue Card -->
             <section class="card tasks-card">
                 <div class="card-header">
-                    <span class="card-title">下载队列与任务</span>
-                    <span id="task-count" class="count-badge">0</span>
+                    <div class="title-with-badge">
+                        <span class="section-label">下载任务</span>
+                        <span id="task-count" class="counter-badge">0</span>
+                    </div>
                 </div>
                 <div id="task-list" class="task-list">
-                    <div class="empty-hint">暂无下载任务，解析视频后即可一键下载</div>
+                    <div class="empty-state">
+                        <div class="empty-icon">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                                <line x1="8" y1="21" x2="16" y2="21" />
+                                <line x1="12" y1="17" x2="12" y2="21" />
+                            </svg>
+                        </div>
+                        <p class="empty-title">队列暂无任务</p>
+                        <p class="empty-desc">解析视频后选择心仪画质，即可一键下载到相册</p>
+                    </div>
                 </div>
             </section>
         </main>
@@ -100,17 +149,36 @@
             <div class="modal-backdrop"></div>
             <div class="modal-card">
                 <div class="modal-header">
-                    <h3>B站扫码登录</h3>
-                    <button id="btn-close-modal" class="close-btn">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <p class="sub-hint">登录后可解锁 4K、1080P60 等大会员专属高清画质</p>
-                    <div class="qr-container">
-                        <img id="qr-image" src="" alt="登录二维码">
-                        <div id="qr-loading" class="qr-loading">生成中...</div>
+                    <div class="modal-title-group">
+                        <h3 class="modal-title">哔哩哔哩扫码登录</h3>
+                        <p class="modal-subtitle">登录后可解锁 4K、1080P60 等大会员原画画质</p>
                     </div>
-                    <div id="qr-status" class="qr-status">请打开 哔哩哔哩手机客户端 扫码</div>
-                    <button id="btn-refresh-qr" class="btn btn-secondary btn-sm">刷新二维码</button>
+                    <button id="btn-close-modal" class="close-btn" aria-label="关闭">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="qr-wrapper">
+                        <img id="qr-image" class="qr-image" src="" alt="登录二维码">
+                        <div id="qr-loading" class="qr-loading">
+                            <span class="spinner"></span>
+                            <span>生成登录码中...</span>
+                        </div>
+                    </div>
+
+                    <div id="qr-status" class="qr-status">请打开 哔哩哔哩手机客户端 扫码确认</div>
+                    
+                    <button id="btn-refresh-qr" class="btn btn-secondary btn-sm">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10" />
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                        </svg>
+                        <span>刷新二维码</span>
+                    </button>
                 </div>
             </div>
         </div>

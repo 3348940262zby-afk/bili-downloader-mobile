@@ -26,7 +26,7 @@ object DouyinParser {
     private var cachedTtwidTime: Long = 0
 
     fun extractUrl(text: String): String? {
-        val p = Pattern.compile("https?://(?:v\\.douyin\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_-]+\\.)?douyin\\.com/[^\\s]+|(?:www\\.)?iesdouyin\\.com/share/video/\\d+)")
+        val p = Pattern.compile("https?://(?:v\\.douyin\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_.-]+\\.)?(?:douyin|iesdouyin)\\.com/[^\\s，,、\"'<>]+)")
         val m = p.matcher(text)
         return if (m.find()) m.group(0) else null
     }
@@ -68,41 +68,54 @@ object DouyinParser {
         val targetUrl = extractUrl(input)
         if (targetUrl == null) {
             result.addProperty("success", false)
-            result.addProperty("message", "未能识别出有效的抖音分享链接 (如 https://v.douyin.com/...)")
+            result.addProperty("message", "未能识别出有效的抖音分享链接 (如 https://v.douyin.com/... 或 https://www.iesdouyin.com/share/video/...)")
             return@withContext result
         }
 
         try {
-            // Step 1: Follow redirect
-            var finalUrl: String = targetUrl
-            val headReq = Request.Builder()
-                .url(targetUrl)
-                .header("User-Agent", MOBILE_UA)
-                .build()
-
-            client.newCall(headReq).execute().use { resp ->
-                finalUrl = resp.request.url.toString()
-            }
-
-            // Step 2: Extract item ID
+            // Step 1: Extract item ID directly if already in targetUrl
             var itemId: String? = null
-            val modalP = Pattern.compile("modal_id=(\\d{18,20})")
-            val modalM = modalP.matcher(finalUrl)
-            if (modalM.find()) {
-                itemId = modalM.group(1)
+            val videoP = Pattern.compile("/video/(\\d+)")
+            val noteP = Pattern.compile("/note/(\\d+)")
+            val modalP = Pattern.compile("modal_id=(\\d+)")
+            val digitP = Pattern.compile("(\\d{18,20})")
+
+            var vm = videoP.matcher(targetUrl)
+            if (vm.find()) itemId = vm.group(1)
+            if (itemId == null) {
+                val nm = noteP.matcher(targetUrl)
+                if (nm.find()) itemId = nm.group(1)
             }
             if (itemId == null) {
-                val videoP = Pattern.compile("/video/(\\d+)")
-                val videoM = videoP.matcher(finalUrl)
-                if (videoM.find()) {
-                    itemId = videoM.group(1)
+                val mm = modalP.matcher(targetUrl)
+                if (mm.find()) itemId = mm.group(1)
+            }
+
+            // If not found in targetUrl (e.g. shortlink https://v.douyin.com/xxxx), follow redirect
+            var finalUrl: String = targetUrl
+            if (itemId == null) {
+                val headReq = Request.Builder()
+                    .url(targetUrl)
+                    .header("User-Agent", MOBILE_UA)
+                    .build()
+
+                client.newCall(headReq).execute().use { resp ->
+                    finalUrl = resp.request.url.toString()
                 }
-            }
-            if (itemId == null) {
-                val digitP = Pattern.compile("(\\d{18,20})")
-                val digitM = digitP.matcher(finalUrl)
-                if (digitM.find()) {
-                    itemId = digitM.group(1)
+
+                vm = videoP.matcher(finalUrl)
+                if (vm.find()) itemId = vm.group(1)
+                if (itemId == null) {
+                    val nm = noteP.matcher(finalUrl)
+                    if (nm.find()) itemId = nm.group(1)
+                }
+                if (itemId == null) {
+                    val mm = modalP.matcher(finalUrl)
+                    if (mm.find()) itemId = mm.group(1)
+                }
+                if (itemId == null) {
+                    val dm = digitP.matcher(finalUrl)
+                    if (dm.find()) itemId = dm.group(1)
                 }
             }
 
@@ -112,7 +125,7 @@ object DouyinParser {
                 return@withContext result
             }
 
-            // Step 3: Fetch detail with TTWID
+            // Step 2: Fetch detail with TTWID
             val ttwid = getTtwid()
             val shareUrl = "https://www.iesdouyin.com/share/video/$itemId/"
             val shareReq = Request.Builder()
@@ -129,44 +142,98 @@ object DouyinParser {
                 html = resp.body?.string() ?: ""
             }
 
-            // Find JSON in _ROUTER_DATA or RENDER_DATA
             var videoUrl: String? = null
             var title = "抖音视频_$itemId"
             var coverUrl = ""
             var author = "抖音用户"
 
-            val routerP = Pattern.compile("<script[^>]*id=\"_ROUTER_DATA\"[^>]*>(.*?)</script>")
-            val routerM = routerP.matcher(html)
-            if (routerM.find()) {
-                val rawJson = routerM.group(1)
-                try {
-                    val root = gson.fromJson(rawJson, JsonObject::class.java)
-                    val loaderData = root.getAsJsonObject("loaderData")
-                    val itemInfo = loaderData.entrySet().firstOrNull { it.key.contains("video_") }?.value?.asJsonObject
-                        ?: loaderData.getAsJsonObject("video_(id)/page")
-                    val videoData = itemInfo?.getAsJsonObject("videoInfoRes")
-                        ?.getAsJsonArray("item_list")?.get(0)?.asJsonObject
-
-                    if (videoData != null) {
-                        title = videoData.get("desc")?.asString ?: title
-                        author = videoData.getAsJsonObject("author")?.get("nickname")?.asString ?: author
-                        coverUrl = videoData.getAsJsonObject("video")?.getAsJsonObject("cover")?.getAsJsonArray("url_list")?.get(0)?.asString ?: ""
-                        val playList = videoData.getAsJsonObject("video")?.getAsJsonObject("play_addr")?.getAsJsonArray("url_list")
-                        if (playList != null && playList.size() > 0) {
-                            videoUrl = playList.get(0).asString.replace("playwm", "play")
+            // Step 3: Extract JSON from window._ROUTER_DATA or script tags
+            try {
+                var rawJson: String? = null
+                val routerIdx = html.indexOf("window._ROUTER_DATA")
+                if (routerIdx != -1) {
+                    val scriptEndIdx = html.indexOf("</script>", routerIdx)
+                    if (scriptEndIdx != -1) {
+                        val assignIdx = html.indexOf("=", routerIdx)
+                        if (assignIdx in routerIdx until scriptEndIdx) {
+                            var snippet = html.substring(assignIdx + 1, scriptEndIdx).trim()
+                            if (snippet.endsWith(";")) {
+                                snippet = snippet.substring(0, snippet.length - 1).trim()
+                            }
+                            rawJson = snippet
                         }
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                }
+
+                if (rawJson == null) {
+                    val routerP = Pattern.compile("<script[^>]*id=\"_ROUTER_DATA\"[^>]*>(.*?)</script>")
+                    val routerM = routerP.matcher(html)
+                    if (routerM.find()) {
+                        rawJson = routerM.group(1).trim()
+                    }
+                }
+
+                if (!rawJson.isNullOrBlank()) {
+                    val root = gson.fromJson(rawJson, JsonObject::class.java)
+                    val loaderData = root?.getAsJsonObject("loaderData")
+                    if (loaderData != null) {
+                        // Find entry that actually contains videoInfoRes (prevent picking null video_layout)
+                        var videoData: JsonObject? = null
+                        for (entry in loaderData.entrySet()) {
+                            if (entry.value.isJsonObject) {
+                                val itemObj = entry.value.asJsonObject
+                                if (itemObj.has("videoInfoRes")) {
+                                    val vir = itemObj.getAsJsonObject("videoInfoRes")
+                                    val itemList = vir.getAsJsonArray("item_list")
+                                    if (itemList != null && itemList.size() > 0 && itemList.get(0).isJsonObject) {
+                                        videoData = itemList.get(0).asJsonObject
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        if (videoData != null) {
+                            title = videoData.get("desc")?.asString ?: title
+                            val authorObj = videoData.getAsJsonObject("author")
+                            if (authorObj != null && authorObj.has("nickname")) {
+                                author = authorObj.get("nickname").asString
+                            }
+
+                            val videoObj = videoData.getAsJsonObject("video")
+                            if (videoObj != null) {
+                                val coverList = videoObj.getAsJsonObject("cover")?.getAsJsonArray("url_list")
+                                if (coverList != null && coverList.size() > 0) {
+                                    coverUrl = coverList.get(0).asString
+                                }
+                                val playList = videoObj.getAsJsonObject("play_addr")?.getAsJsonArray("url_list")
+                                if (playList != null && playList.size() > 0) {
+                                    videoUrl = playList.get(0).asString.replace("playwm", "play")
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // Step 4: Fallback extraction on unescaped HTML
+            if (videoUrl == null) {
+                val unescaped = html.replace("\\u002F", "/").replace("\\/", "/")
+                val fallbackP = Pattern.compile("https?://[^\"'\\s<>]+?(?:playwm|play)/[^\"'\\s<>]+")
+                val fallbackM = fallbackP.matcher(unescaped)
+                if (fallbackM.find()) {
+                    videoUrl = fallbackM.group(0).replace("playwm", "play")
                 }
             }
 
-            if (videoUrl == null) {
-                // Regex fallback for playwm/play
-                val fallbackP = Pattern.compile("https?://[^\"'\\s]+?(?:playwm|play)/[^\"'\\s]+")
-                val fallbackM = fallbackP.matcher(html)
-                if (fallbackM.find()) {
-                    videoUrl = fallbackM.group(0).replace("playwm", "play")
+            if (title == "抖音视频_$itemId") {
+                val titleP = Pattern.compile("<title>(.*?)</title>")
+                val titleM = titleP.matcher(html)
+                if (titleM.find()) {
+                    val t = titleM.group(1).trim()
+                    if (t.isNotEmpty()) title = t
                 }
             }
 
@@ -180,7 +247,7 @@ object DouyinParser {
                 result.addProperty("item_id", itemId)
             } else {
                 result.addProperty("success", false)
-                result.addProperty("message", "未能获取到抖音无水印直链，请稍后重试")
+                result.addProperty("message", "未能获取到抖音无水印直链，请检查链接或稍后重试")
             }
         } catch (e: Exception) {
             e.printStackTrace()

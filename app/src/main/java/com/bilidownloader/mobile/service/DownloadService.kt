@@ -188,7 +188,7 @@ class DownloadService : Service() {
                 targetFile.createNewFile()
 
                 var bytesCopied: Long = 0
-                val buffer = ByteArray(8192)
+                val buffer = ByteArray(64 * 1024)
                 var lastTime = System.currentTimeMillis()
                 var bytesSinceLast = 0L
 

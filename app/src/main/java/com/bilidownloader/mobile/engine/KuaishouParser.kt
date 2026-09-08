@@ -21,7 +21,7 @@ object KuaishouParser {
     private val gson = Gson()
 
     fun extractUrl(text: String): String? {
-        val p = Pattern.compile("https?://(?:v\\.kuaishou\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_-]+\\.)?kuaishou\\.com/[^\\s]+)")
+        val p = Pattern.compile("https?://(?:v\\.kuaishou\\.com/[a-zA-Z0-9_-]+|(?:[a-zA-Z0-9_.-]+\\.)?kuaishou\\.com/[^\\s，,、\"'<>]+)")
         val m = p.matcher(text)
         return if (m.find()) m.group(0) else null
     }
