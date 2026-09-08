@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 
 object GalleryHelper {
 
@@ -119,6 +118,9 @@ object GalleryHelper {
             }
             return@withContext null
         }
+        return@withContext uri
+    }
+
     suspend fun saveImageToGallery(
         context: Context,
         imageBytes: ByteArray,
