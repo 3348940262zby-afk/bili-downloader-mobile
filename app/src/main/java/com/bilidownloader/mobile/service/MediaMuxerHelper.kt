@@ -68,40 +68,51 @@ object MediaMuxerHelper {
             val buffer = ByteBuffer.allocate(bufferSize)
             val bufferInfo = MediaCodec.BufferInfo()
 
-            // 1. Write video samples
+            // Interleave video and audio samples chronologically by presentation time
             videoExtractor.selectTrack(videoTrackIndex)
-            val totalDuration = if (videoFormat.containsKey(MediaFormat.KEY_DURATION)) {
-                try { videoFormat.getLong(MediaFormat.KEY_DURATION) } catch (e: Exception) { 0L }
-            } else 0L
-            while (true) {
-                bufferInfo.offset = 0
-                bufferInfo.size = videoExtractor.readSampleData(buffer, 0)
-                if (bufferInfo.size < 0) {
-                    break
-                }
-                bufferInfo.presentationTimeUs = videoExtractor.sampleTime
-                bufferInfo.flags = videoExtractor.sampleFlags
-                muxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo)
-                
-                if (totalDuration > 0 && progressCallback != null) {
-                    val p = (bufferInfo.presentationTimeUs.toFloat() / totalDuration.toFloat()) * 0.5f
-                    progressCallback(p)
-                }
-                videoExtractor.advance()
-            }
-
-            // 2. Write audio samples
             audioExtractor.selectTrack(audioTrackIndex)
-            while (true) {
-                bufferInfo.offset = 0
-                bufferInfo.size = audioExtractor.readSampleData(buffer, 0)
-                if (bufferInfo.size < 0) {
-                    break
+
+            val totalDuration = if (videoFormat.containsKey(MediaFormat.KEY_DURATION)) {
+                try { videoFormat.getLong(MediaFormat.KEY_DURATION) } catch (_: Exception) { 0L }
+            } else 0L
+
+            var videoDone = false
+            var audioDone = false
+
+            while (!videoDone || !audioDone) {
+                val writeVideo: Boolean = when {
+                    videoDone -> false
+                    audioDone -> true
+                    else -> videoExtractor.sampleTime <= audioExtractor.sampleTime
                 }
-                bufferInfo.presentationTimeUs = audioExtractor.sampleTime
-                bufferInfo.flags = audioExtractor.sampleFlags
-                muxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo)
-                audioExtractor.advance()
+
+                if (writeVideo) {
+                    bufferInfo.offset = 0
+                    bufferInfo.size = videoExtractor.readSampleData(buffer, 0)
+                    if (bufferInfo.size < 0) {
+                        videoDone = true
+                    } else {
+                        bufferInfo.presentationTimeUs = videoExtractor.sampleTime
+                        bufferInfo.flags = videoExtractor.sampleFlags
+                        muxer.writeSampleData(muxerVideoTrack, buffer, bufferInfo)
+                        if (totalDuration > 0 && progressCallback != null) {
+                            val p = (bufferInfo.presentationTimeUs.toFloat() / totalDuration.toFloat())
+                            progressCallback(p.coerceIn(0f, 1f))
+                        }
+                        videoExtractor.advance()
+                    }
+                } else {
+                    bufferInfo.offset = 0
+                    bufferInfo.size = audioExtractor.readSampleData(buffer, 0)
+                    if (bufferInfo.size < 0) {
+                        audioDone = true
+                    } else {
+                        bufferInfo.presentationTimeUs = audioExtractor.sampleTime
+                        bufferInfo.flags = audioExtractor.sampleFlags
+                        muxer.writeSampleData(muxerAudioTrack, buffer, bufferInfo)
+                        audioExtractor.advance()
+                    }
+                }
             }
 
             progressCallback?.invoke(1.0f)

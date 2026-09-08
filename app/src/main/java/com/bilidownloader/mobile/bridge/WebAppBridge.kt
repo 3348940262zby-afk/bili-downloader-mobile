@@ -93,13 +93,16 @@ class WebAppBridge(
                     return@runOnUiThread
                 }
 
+                val isAudio = runCatching { obj.get("isAudio")?.asBoolean }.getOrDefault(false) == true || obj.str("isAudio") == "true"
+
                 val task = DownloadTask(
                     id = id,
                     title = title,
                     videoUrl = videoUrl,
                     audioUrl = audioUrl,
                     referer = referer,
-                    userAgent = userAgent
+                    userAgent = userAgent,
+                    isAudio = isAudio
                 )
 
                 val service = serviceProvider()
@@ -158,8 +161,8 @@ class WebAppBridge(
     fun pollQrCode(key: String) {
         scope.launch {
             val res = withContext(Dispatchers.IO) { BiliParser.pollQrCode(key) }
-            if (res.has("cookies")) {
-                val cookies = res.get("cookies").asString
+            val cookies = res.str("cookies")
+            if (!cookies.isNullOrEmpty()) {
                 prefs.edit().putString("bili_cookies", cookies).apply()
             }
             val jsonStr = gson.toJson(res)

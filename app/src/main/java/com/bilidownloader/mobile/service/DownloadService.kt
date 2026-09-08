@@ -28,6 +28,7 @@ data class DownloadTask(
     val audioUrl: String? = null,
     val referer: String = "https://www.bilibili.com/",
     val userAgent: String = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    val isAudio: Boolean = false,
     var status: String = "pending", // pending, downloading, merging, saving, completed, failed
     var progress: Int = 0,
     var speed: String = "0 KB/s",
@@ -87,9 +88,9 @@ class DownloadService : Service() {
             val hasAudioStream = !task.audioUrl.isNullOrEmpty()
 
             // 1. Download video track
+            val maxProgress = if (hasAudioStream) 80 else 95
             val videoSuccess = downloadFile(task.videoUrl, tempVideoFile, task.referer, task.userAgent) { bytesRead, totalBytes, speedStr ->
-                val ratio = if (hasAudioStream) 0.8f else 1.0f
-                val p = if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * 100 * ratio).toInt().coerceIn(0, 80) else 50
+                val p = if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * maxProgress).toInt().coerceIn(0, maxProgress) else (maxProgress / 2)
                 task.progress = p
                 task.speed = speedStr
                 updateNotification(task.title, "下载视频流: $p% ($speedStr)", p)
@@ -122,8 +123,8 @@ class DownloadService : Service() {
 
                 // 3. Muxing
                 task.status = "merging"
-                task.progress = 95
-                updateNotification(task.title, "合成高清音视频中...", 95)
+                task.progress = 96
+                updateNotification(task.title, "合成高清音视频中...", 96)
                 notifyTaskUpdated(task)
 
                 val muxSuccess = MediaMuxerHelper.muxVideoAndAudio(tempVideoFile, tempAudioFile, tempMergedFile)
@@ -141,7 +142,7 @@ class DownloadService : Service() {
             updateNotification(task.title, "写入手机系统相册...", 98)
             notifyTaskUpdated(task)
 
-            val isAudioOnly = !hasAudioStream && (task.title.contains("音频") || task.title.contains("audio", ignoreCase = true) || task.videoUrl.contains("audio"))
+            val isAudioOnly = task.isAudio
             val savedUri = if (isAudioOnly) {
                 GalleryHelper.saveAudioToGallery(this@DownloadService, tempMergedFile, "$safeTitle.m4a")
             } else {
@@ -178,72 +179,88 @@ class DownloadService : Service() {
         userAgent: String,
         onProgress: (Long, Long, String) -> Unit
     ): Boolean {
-        val req = Request.Builder()
-            .url(url)
-            .header("Referer", referer)
-            .header("User-Agent", userAgent)
-            .header("Accept", "*/*")
-            .header("Accept-Encoding", "identity")
-            .build()
+        var attempts = 0
+        while (attempts < 3) {
+            attempts++
+            val req = Request.Builder()
+                .url(url)
+                .header("Referer", referer)
+                .header("User-Agent", userAgent)
+                .header("Accept", "*/*")
+                .header("Accept-Encoding", "identity")
+                .build()
 
-        try {
-            httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    Log.e("DownloadService", "Download response code not successful: ${resp.code} for $url")
-                    return false
-                }
-                val body = resp.body ?: return false
-                val totalBytes = body.contentLength()
-
-                if (targetFile.exists()) targetFile.delete()
-                targetFile.createNewFile()
-
-                var bytesCopied: Long = 0
-                val buffer = ByteArray(64 * 1024)
-                var lastTime = System.currentTimeMillis()
-                var bytesSinceLast = 0L
-
-                body.byteStream().use { input ->
-                    FileOutputStream(targetFile).use { output ->
-                        var read = input.read(buffer)
-                        while (read >= 0) {
-                            output.write(buffer, 0, read)
-                            bytesCopied += read
-                            bytesSinceLast += read
-
-                            val now = System.currentTimeMillis()
-                            if (now - lastTime >= 400) {
-                                val speedBps = (bytesSinceLast * 1000) / (now - lastTime).coerceAtLeast(1)
-                                val speedStr = if (speedBps > 1024 * 1024) {
-                                    String.format("%.1f MB/s", speedBps / (1024f * 1024f))
-                                } else {
-                                    String.format("%d KB/s", speedBps / 1024)
-                                }
-                                onProgress(bytesCopied, totalBytes, speedStr)
-                                lastTime = now
-                                bytesSinceLast = 0
-                            }
-                            read = input.read(buffer)
-                        }
-                        output.flush()
+            try {
+                httpClient.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        Log.e("DownloadService", "Attempt $attempts: HTTP error ${resp.code} for $url")
+                        if (attempts < 3) Thread.sleep(800)
+                        return@use
                     }
-                }
+                    val body = resp.body ?: return@use
+                    val totalBytes = body.contentLength()
 
-                // Verify completed file
-                if (totalBytes > 0 && bytesCopied < totalBytes) {
-                    Log.e("DownloadService", "Downloaded size $bytesCopied less than contentLength $totalBytes")
-                    return false
+                    if (targetFile.exists()) targetFile.delete()
+                    targetFile.createNewFile()
+
+                    var bytesCopied: Long = 0
+                    val buffer = ByteArray(64 * 1024)
+                    var lastTime = System.currentTimeMillis()
+                    var bytesSinceLast = 0L
+
+                    body.byteStream().use { input ->
+                        FileOutputStream(targetFile).use { output ->
+                            var read = input.read(buffer)
+                            while (read >= 0) {
+                                output.write(buffer, 0, read)
+                                bytesCopied += read
+                                bytesSinceLast += read
+
+                                val now = System.currentTimeMillis()
+                                if (now - lastTime >= 400) {
+                                    val speedBps = (bytesSinceLast * 1000) / (now - lastTime).coerceAtLeast(1)
+                                    val speedStr = if (speedBps > 1024 * 1024) {
+                                        String.format("%.1f MB/s", speedBps / (1024f * 1024f))
+                                    } else {
+                                        String.format("%d KB/s", speedBps / 1024)
+                                    }
+                                    onProgress(bytesCopied, totalBytes, speedStr)
+                                    lastTime = now
+                                    bytesSinceLast = 0
+                                }
+                                read = input.read(buffer)
+                            }
+                            output.flush()
+                        }
+                    }
+
+                    // Verify completed file
+                    if (totalBytes > 0 && bytesCopied < totalBytes) {
+                        Log.e("DownloadService", "Attempt $attempts: Downloaded size $bytesCopied less than contentLength $totalBytes")
+                        if (attempts < 3) {
+                            Thread.sleep(800)
+                            return@use
+                        }
+                        return false
+                    }
+                    if (targetFile.length() < 1024) {
+                        Log.e("DownloadService", "Attempt $attempts: Downloaded file too small (${targetFile.length()} bytes)")
+                        if (attempts < 3) {
+                            Thread.sleep(800)
+                            return@use
+                        }
+                        return false
+                    }
+                    return true
                 }
-                if (targetFile.length() < 1024) {
-                    Log.e("DownloadService", "Downloaded file too small (${targetFile.length()} bytes)")
-                    return false
+            } catch (e: Exception) {
+                Log.e("DownloadService", "Attempt $attempts: Exception ${e.message}")
+                if (attempts < 3) {
+                    try { Thread.sleep(800) } catch (_: Exception) {}
                 }
-                return true
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
         }
+        return false
     }
 
     private fun notifyTaskUpdated(task: DownloadTask) {

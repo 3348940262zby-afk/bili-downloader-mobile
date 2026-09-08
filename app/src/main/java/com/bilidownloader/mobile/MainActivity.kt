@@ -229,13 +229,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 rootLayout.addView(progressBar)
 
-                // Dedicated login WebView
+                // Dedicated login WebView (uses mobile browser UA for SMS/password login)
                 val loginWebView = WebView(this).apply {
                     layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        userAgentString = BiliParser.USER_AGENT
                         useWideViewPort = true
                         loadWithOverviewMode = true
                     }
@@ -245,6 +244,54 @@ class MainActivity : AppCompatActivity() {
                 cookieManager.setAcceptCookie(true)
                 cookieManager.setAcceptThirdPartyCookies(loginWebView, true)
 
+                var isLoginFinished = false
+                val pollHandler = Handler(Looper.getMainLooper())
+                val pollRunnable = object : Runnable {
+                    override fun run() {
+                        if (isLoginFinished) return
+                        val domains = listOf(
+                            "https://passport.bilibili.com",
+                            "https://m.bilibili.com",
+                            "https://www.bilibili.com",
+                            "https://bilibili.com",
+                            ".bilibili.com"
+                        )
+                        val cookieMap = mutableMapOf<String, String>()
+                        for (d in domains) {
+                            val raw = cookieManager.getCookie(d) ?: continue
+                            for (part in raw.split(";")) {
+                                val kv = part.trim()
+                                val eqIdx = kv.indexOf('=')
+                                if (eqIdx > 0) {
+                                    val k = kv.substring(0, eqIdx).trim()
+                                    val v = kv.substring(eqIdx + 1).trim()
+                                    if (k.isNotEmpty() && v.isNotEmpty()) {
+                                        cookieMap[k] = v
+                                    }
+                                }
+                            }
+                        }
+                        val cookies = cookieMap.map { "${it.key}=${it.value}" }.joinToString("; ")
+
+                        if (cookies.contains("SESSDATA=") && (cookies.contains("DedeUserID=") || cookies.contains("bili_jct="))) {
+                            isLoginFinished = true
+                            getSharedPreferences("bili_downloader_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("bili_cookies", cookies)
+                                .apply()
+
+                            Toast.makeText(this@MainActivity, "B站账号登录成功！已同步大会员画质权限", Toast.LENGTH_SHORT).show()
+
+                            val escaped = cookies.replace("\\", "\\\\").replace("'", "\\'")
+                            webView.evaluateJavascript("javascript:window.onLoginSuccess && window.onLoginSuccess('$escaped')", null)
+
+                            dialog.dismiss()
+                            return
+                        }
+                        pollHandler.postDelayed(this, 1200)
+                    }
+                }
+
                 loginWebView.webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
                         progressBar.progress = newProgress
@@ -253,26 +300,19 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 loginWebView.webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                        pollRunnable.run()
+                    }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
-                        val cookies = cookieManager.getCookie("https://passport.bilibili.com")
-                            ?: cookieManager.getCookie(".bilibili.com")
-                            ?: ""
+                        pollRunnable.run()
+                    }
 
-                        if (cookies.contains("SESSDATA=") && (cookies.contains("DedeUserID=") || cookies.contains("bili_jct="))) {
-                            // Extract and persist cookies
-                            getSharedPreferences("bili_downloader_prefs", Context.MODE_PRIVATE)
-                                .edit()
-                                .putString("bili_cookies", cookies)
-                                .apply()
-
-                            Toast.makeText(this@MainActivity, "B站账号登录成功！已同步会员画质权限", Toast.LENGTH_SHORT).show()
-
-                            val escaped = cookies.replace("\\", "\\\\").replace("'", "\\'")
-                            webView.evaluateJavascript("javascript:window.onLoginSuccess && window.onLoginSuccess('$escaped')", null)
-
-                            dialog.dismiss()
-                        }
+                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        pollRunnable.run()
                     }
                 }
 
@@ -280,12 +320,17 @@ class MainActivity : AppCompatActivity() {
                 dialog.setContentView(rootLayout)
 
                 dialog.setOnDismissListener {
+                    isLoginFinished = true
+                    pollHandler.removeCallbacks(pollRunnable)
                     loginWebView.stopLoading()
                     loginWebView.destroy()
                 }
 
                 dialog.show()
-                loginWebView.loadUrl("https://passport.bilibili.com/login")
+                pollHandler.postDelayed(pollRunnable, 1000)
+
+                val headers = mapOf("Referer" to "https://www.bilibili.com/")
+                loginWebView.loadUrl("https://passport.bilibili.com/login?gourl=https%3A%2F%2Fm.bilibili.com", headers)
 
             } catch (e: Exception) {
                 e.printStackTrace()

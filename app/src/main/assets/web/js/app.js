@@ -11,15 +11,23 @@ const parseText = document.getElementById('parse-text');
 const platformBadge = document.getElementById('platform-badge');
 const platformBadgeText = document.getElementById('platform-badge-text');
 
+const skeletonCard = document.getElementById('skeleton-card');
 const previewCard = document.getElementById('preview-card');
 const previewCover = document.getElementById('preview-cover');
 const previewDuration = document.getElementById('preview-duration');
 const previewTitle = document.getElementById('preview-title');
 const previewAuthor = document.getElementById('preview-author');
 const previewPlatform = document.getElementById('preview-platform');
-const qualitySelect = document.getElementById('quality-select');
+
+const partsSection = document.getElementById('parts-section');
+const partsHint = document.getElementById('parts-hint');
+const partsContainer = document.getElementById('parts-container');
+
 const qualityHint = document.getElementById('quality-hint');
+const streamCardsContainer = document.getElementById('stream-cards-container');
+const qualitySelect = document.getElementById('quality-select');
 const btnDownload = document.getElementById('btn-download');
+const btnDownloadText = document.getElementById('btn-download-text');
 
 const taskList = document.getElementById('task-list');
 const taskCount = document.getElementById('task-count');
@@ -47,6 +55,7 @@ const toastEl = document.getElementById('toast');
 const toastMsg = document.getElementById('toast-msg');
 
 let currentParsedData = null;
+let selectedStreamPayload = null;
 let qrPollInterval = null;
 let currentQrKey = null;
 let currentQrUrl = null;
@@ -54,7 +63,7 @@ let toastTimeout = null;
 const tasksMap = {};
 
 // ==========================================================================
-// 1. Platform Detection & UI Feedback
+// 1. Platform Detection & Adaptive Themes
 // ==========================================================================
 function detectPlatform(text) {
     if (!text) return null;
@@ -62,23 +71,30 @@ function detectPlatform(text) {
     if (s.includes('douyin.com') || s.includes('iesdouyin.com')) return 'douyin';
     if (s.includes('kuaishou.com') || s.includes('gifshow.com')) return 'kuaishou';
     if (s.includes('bilibili.com') || s.includes('b23.tv') || s.includes('bili2233.cn') || 
-        /bv[a-za-z0-9]{10}/i.test(s) || /\bav\d+\b/i.test(s) || /\bep\d+\b/i.test(s) || /\bss\d+\b/i.test(s)) return 'bilibili';
+        /bv[a-za-z0-9]{10}/i.test(s) || /\bav\d+\b/i.test(s) || /\bep\d+\b/i.test(s) || /\bss\d+\b/i.test(s)) {
+        return 'bilibili';
+    }
     return null;
 }
 
-function updatePlatformBadge(text) {
+function updatePlatformThemeAndBadge(text) {
     const platform = detectPlatform(text);
     if (!platform) {
-        platformBadge.className = 'platform-badge hidden';
+        if (platformBadge) platformBadge.className = 'platform-badge hidden';
+        document.body.className = '';
         return;
     }
-    platformBadge.className = `platform-badge platform-${platform}`;
-    if (platform === 'bilibili') {
-        platformBadgeText.textContent = '哔哩哔哩 (B站)';
-    } else if (platform === 'douyin') {
-        platformBadgeText.textContent = '抖音无水印';
-    } else if (platform === 'kuaishou') {
-        platformBadgeText.textContent = '快手无水印';
+
+    document.body.className = `theme-${platform}`;
+    if (platformBadge && platformBadgeText) {
+        platformBadge.className = `platform-badge platform-${platform}`;
+        if (platform === 'bilibili') {
+            platformBadgeText.textContent = '哔哩哔哩 (B站)';
+        } else if (platform === 'douyin') {
+            platformBadgeText.textContent = '抖音无水印';
+        } else if (platform === 'kuaishou') {
+            platformBadgeText.textContent = '快手无水印';
+        }
     }
 }
 
@@ -89,7 +105,7 @@ function handleInputChanges() {
     } else {
         btnClear.classList.add('hidden');
     }
-    updatePlatformBadge(val);
+    updatePlatformThemeAndBadge(val);
 }
 
 urlInput.addEventListener('input', handleInputChanges);
@@ -132,12 +148,12 @@ window.onShareReceived = function(sharedText) {
     if (!sharedText) return;
     urlInput.value = sharedText.trim();
     handleInputChanges();
-    showToast("检测到外部分享，正在解析...");
+    showToast("检测到外部分享，正在智能解析...");
     triggerParse();
 };
 
 // ==========================================================================
-// 3. Parse Logic
+// 3. Parse Logic & Skeleton Shimmer Feedback
 // ==========================================================================
 function setParseLoading(loading) {
     if (loading) {
@@ -160,12 +176,17 @@ function triggerParse() {
         urlInput.focus();
         return;
     }
+
     setParseLoading(true);
+    if (previewCard) previewCard.classList.add('hidden');
+    if (skeletonCard) skeletonCard.classList.remove('hidden');
+
     if (window.AndroidBridge && window.AndroidBridge.parseUrl) {
         window.AndroidBridge.parseUrl(input);
     } else {
         setTimeout(() => {
             setParseLoading(false);
+            if (skeletonCard) skeletonCard.classList.add('hidden');
             showToast("原生接口调试预览模式");
         }, 800);
     }
@@ -176,6 +197,8 @@ btnParse.addEventListener('click', triggerParse);
 // Called by Android WebAppBridge
 window.onParseResult = function(rawJson) {
     setParseLoading(false);
+    if (skeletonCard) skeletonCard.classList.add('hidden');
+
     try {
         const res = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
         if (!res.success) {
@@ -196,10 +219,14 @@ function formatDuration(seconds) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+// ==========================================================================
+// 4. Preview & Custom Tactile Stream Cards Rendering
+// ==========================================================================
 function renderPreview(data) {
     currentParsedData = data;
-    previewCard.classList.remove('hidden');
+    selectedStreamPayload = null;
 
+    if (previewCard) previewCard.classList.remove('hidden');
     previewTitle.textContent = data.title || "未知标题";
     previewAuthor.textContent = data.author || "媒体创作者";
     previewCover.src = data.pic || "";
@@ -207,9 +234,18 @@ function renderPreview(data) {
 
     const platform = data.platform || 'bilibili';
     previewPlatform.textContent = platform === 'bilibili' ? 'Bilibili' : (platform === 'douyin' ? '抖音' : '快手');
+    document.body.className = `theme-${platform}`;
 
-    // Populate quality options
-    qualitySelect.innerHTML = '';
+    // Multi-Part (分P) Selector Rendering
+    if (platform === 'bilibili' && data.pages && data.pages.length > 1) {
+        renderParts(data.pages, data.current_page || 1, data.bvid);
+    } else {
+        if (partsSection) partsSection.classList.add('hidden');
+        if (partsContainer) partsContainer.innerHTML = '';
+    }
+
+    // Build Stream Cards Spec
+    const streamItems = [];
 
     if (platform === 'bilibili' && data.play_data) {
         const playData = data.play_data;
@@ -221,12 +257,12 @@ function renderPreview(data) {
             const bestAudio = audios.length > 0 ? (audios[0].baseUrl || audios[0].base_url) : null;
 
             const qnMap = {
-                127: "8K 超高清 (大会员)",
-                126: "杜比视界 Dolby Vision (大会员)",
-                125: "HDR 真彩 (大会员)",
-                120: "4K 超清 (大会员)",
-                116: "1080P 60帧 (大会员)",
-                112: "1080P 高码率 (大会员)",
+                127: "8K 超高清",
+                126: "杜比视界 Dolby Vision",
+                125: "HDR 真彩",
+                120: "4K 超清",
+                116: "1080P 60帧",
+                112: "1080P 高码率",
                 80: "1080P 高清",
                 64: "720P 高清",
                 32: "480P 清晰",
@@ -240,113 +276,269 @@ function renderPreview(data) {
                 const key = `${qn}_${codec}`;
                 if (!addedKeys.has(key)) {
                     addedKeys.add(key);
-                    const opt = document.createElement('option');
-                    opt.value = JSON.stringify({
-                        videoUrl: v.baseUrl || v.base_url,
-                        audioUrl: bestAudio,
-                        referer: "https://www.bilibili.com/",
-                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                    });
                     const qnLabel = qnMap[qn] || `画质 ${qn}`;
-                    opt.textContent = `${qnLabel} · [${codec}]`;
-                    qualitySelect.appendChild(opt);
+                    const isVip = qn >= 112;
+                    streamItems.push({
+                        label: qnLabel,
+                        isVip: isVip,
+                        subTag: `[${codec}] · 高清独立音视频`,
+                        payload: {
+                            videoUrl: v.baseUrl || v.base_url,
+                            audioUrl: bestAudio,
+                            referer: "https://www.bilibili.com/",
+                            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                            isAudio: false
+                        }
+                    });
                 }
             });
 
-            // Add audio-only extraction option
+            // Audio-only extraction card
             if (bestAudio) {
-                const optAudio = document.createElement('option');
-                optAudio.value = JSON.stringify({
-                    videoUrl: bestAudio,
-                    audioUrl: null,
-                    referer: "https://www.bilibili.com/",
-                    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                streamItems.push({
+                    label: "提取独立音频流",
+                    isVip: false,
+                    subTag: "高音质 M4A · 自动存入系统音乐库",
+                    payload: {
+                        videoUrl: bestAudio,
+                        audioUrl: null,
+                        referer: "https://www.bilibili.com/",
+                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        isAudio: true
+                    }
                 });
-                optAudio.textContent = "仅提取音频流 (高音质 M4A / 音乐库)";
-                qualitySelect.appendChild(optAudio);
             }
         } else if (playData.durl && playData.durl.length > 0) {
-            // Legacy single mp4 durl
             const first = playData.durl[0];
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify({
-                videoUrl: first.url,
-                audioUrl: null,
-                referer: "https://www.bilibili.com/",
-                userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            streamItems.push({
+                label: "高清标准流",
+                isVip: false,
+                subTag: "MP4 单文件 · 原生音画一体",
+                payload: {
+                    videoUrl: first.url,
+                    audioUrl: null,
+                    referer: "https://www.bilibili.com/",
+                    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    isAudio: false
+                }
             });
-            opt.textContent = "高清标准流 (MP4 单文件)";
-            qualitySelect.appendChild(opt);
         }
 
     } else if (platform === 'douyin') {
         const streams = data.streams || [];
         if (streams.length > 0) {
-            streams.forEach((s, idx) => {
-                const opt = document.createElement('option');
-                opt.value = JSON.stringify({
-                    videoUrl: s.url,
+            streams.forEach(s => {
+                const brText = s.bit_rate ? `${Math.round(s.bit_rate / 1024)} kbps · ` : '';
+                streamItems.push({
+                    label: s.quality || '超清画质',
+                    isVip: false,
+                    subTag: `${brText}无水印 MP4`,
+                    payload: {
+                        videoUrl: s.url,
+                        audioUrl: null,
+                        referer: "https://www.douyin.com/",
+                        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                        isAudio: false
+                    }
+                });
+            });
+
+            // Audio extraction for Douyin
+            streamItems.push({
+                label: "提取背景音频",
+                isVip: false,
+                subTag: "无损音轨 · 自动存入系统音乐库",
+                payload: {
+                    videoUrl: streams[0].url,
                     audioUrl: null,
                     referer: "https://www.douyin.com/",
-                    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
-                });
-                const brLabel = s.bit_rate ? ` (${Math.round(s.bit_rate / 1024)} kbps)` : '';
-                opt.textContent = `${s.quality || '超清画质'}${brLabel} · 无水印`;
-                if (idx === 0) opt.selected = true;
-                qualitySelect.appendChild(opt);
+                    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                    isAudio: true
+                }
             });
+
         } else if (data.direct_video_url) {
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify({
-                videoUrl: data.direct_video_url,
-                audioUrl: null,
-                referer: "https://www.douyin.com/",
-                userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
+            streamItems.push({
+                label: "原画超清",
+                isVip: false,
+                subTag: "无水印 MP4 · 原生直链",
+                payload: {
+                    videoUrl: data.direct_video_url,
+                    audioUrl: null,
+                    referer: "https://www.douyin.com/",
+                    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                    isAudio: false
+                }
             });
-            opt.textContent = "原画超清 (无水印 MP4)";
-            qualitySelect.appendChild(opt);
+            streamItems.push({
+                label: "提取背景音频",
+                isVip: false,
+                subTag: "无损音轨 · 自动存入系统音乐库",
+                payload: {
+                    videoUrl: data.direct_video_url,
+                    audioUrl: null,
+                    referer: "https://www.douyin.com/",
+                    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                    isAudio: true
+                }
+            });
         }
 
     } else if (data.direct_video_url) {
-        // Direct MP4 (Kuaishou)
-        const opt = document.createElement('option');
-        opt.value = JSON.stringify({
-            videoUrl: data.direct_video_url,
-            audioUrl: null,
-            referer: "https://v.kuaishou.com/",
-            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
+        streamItems.push({
+            label: "原画超清",
+            isVip: false,
+            subTag: "无水印 MP4 · 快手高速流",
+            payload: {
+                videoUrl: data.direct_video_url,
+                audioUrl: null,
+                referer: "https://v.kuaishou.com/",
+                userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                isAudio: false
+            }
         });
-        opt.textContent = "原画超清 (无水印 MP4)";
-        qualitySelect.appendChild(opt);
+        streamItems.push({
+            label: "提取背景音频",
+            isVip: false,
+            subTag: "无损音轨 · 自动存入系统音乐库",
+            payload: {
+                videoUrl: data.direct_video_url,
+                audioUrl: null,
+                referer: "https://v.kuaishou.com/",
+                userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+                isAudio: true
+            }
+        });
     }
 
-    if (qualityHint) {
-        qualityHint.textContent = `共 ${qualitySelect.options.length} 档规格`;
-    }
+    renderStreamCards(streamItems);
 
     // Scroll smoothly to preview
     previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+// Render Multi-Part (分P) Selector Pills
+function renderParts(pages, activePage, bvid) {
+    if (!partsSection || !partsContainer) return;
+    partsSection.classList.remove('hidden');
+    partsHint.textContent = `共 ${pages.length} 集 · 当前第 ${activePage} 集`;
+    partsContainer.innerHTML = '';
+
+    pages.forEach(p => {
+        const chip = document.createElement('button');
+        const isCurrent = (p.page === activePage);
+        chip.className = 'part-chip' + (isCurrent ? ' active' : '');
+        chip.title = p.part || `P${p.page}`;
+        chip.textContent = `P${p.page} ${p.part || ''}`;
+
+        chip.addEventListener('click', () => {
+            if (isCurrent) return;
+            urlInput.value = `https://www.bilibili.com/video/${bvid}?p=${p.page}`;
+            handleInputChanges();
+            triggerParse();
+        });
+        partsContainer.appendChild(chip);
+    });
+}
+
+// Render Tactile Custom Stream Cards
+function renderStreamCards(items) {
+    if (!streamCardsContainer) return;
+    streamCardsContainer.innerHTML = '';
+    if (qualitySelect) qualitySelect.innerHTML = '';
+
+    if (items.length === 0) {
+        if (qualityHint) qualityHint.textContent = "未能获取到可用画质";
+        return;
+    }
+
+    if (qualityHint) {
+        qualityHint.textContent = `已自动优选最高画质 · 共 ${items.length} 档规格`;
+    }
+
+    items.forEach((item, idx) => {
+        // Also populate hidden native select for fallback compatibility
+        if (qualitySelect) {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify(item.payload);
+            opt.textContent = `${item.label} (${item.subTag})`;
+            if (idx === 0) opt.selected = true;
+            qualitySelect.appendChild(opt);
+        }
+
+        const card = document.createElement('div');
+        const isSelected = (idx === 0);
+        if (isSelected) {
+            selectedStreamPayload = item.payload;
+            if (btnDownloadText) {
+                btnDownloadText.textContent = item.payload.isAudio ? "下载并保存至手机音乐库" : "下载并保存至手机相册";
+            }
+        }
+
+        card.className = 'stream-card' + (isSelected ? ' selected' : '');
+        card.innerHTML = `
+            <div class="stream-card-left">
+                <div class="stream-title-row">
+                    <span class="stream-label">${item.label}</span>
+                    ${item.isVip ? '<span class="stream-vip-tag">大会员</span>' : ''}
+                </div>
+                <div class="stream-badge-row">
+                    <span class="stream-sub-tag">${item.subTag}</span>
+                </div>
+            </div>
+            <div class="stream-check-mark">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                </svg>
+            </div>
+        `;
+
+        card.addEventListener('click', () => {
+            selectStreamCard(item, card);
+        });
+
+        streamCardsContainer.appendChild(card);
+    });
+}
+
+function selectStreamCard(item, cardElement) {
+    selectedStreamPayload = item.payload;
+    document.querySelectorAll('.stream-card').forEach(c => c.classList.remove('selected'));
+    cardElement.classList.add('selected');
+
+    if (qualitySelect) {
+        qualitySelect.value = JSON.stringify(item.payload);
+    }
+    if (btnDownloadText) {
+        btnDownloadText.textContent = item.payload.isAudio ? "下载并保存至手机音乐库" : "下载并保存至手机相册";
+    }
+}
+
 // ==========================================================================
-// 4. Download Execution
+// 5. Download Execution
 // ==========================================================================
 btnDownload.addEventListener('click', () => {
-    if (!currentParsedData) return;
-    const selectedValue = qualitySelect.value;
-    if (!selectedValue) {
-        showToast("请先选择导出规格");
+    if (!currentParsedData || !selectedStreamPayload) {
+        showToast("请先选择清晰度或提取规格");
         return;
     }
 
     try {
-        const streamInfo = JSON.parse(selectedValue);
+        let taskTitle = currentParsedData.title || "媒体下载";
+        if (currentParsedData.pages && currentParsedData.pages.length > 1 && currentParsedData.part_title) {
+            taskTitle = `${currentParsedData.title} - P${currentParsedData.current_page || 1} ${currentParsedData.part_title}`;
+        }
+        if (selectedStreamPayload.isAudio) {
+            taskTitle += " [音频]";
+        }
+
         const taskPayload = {
-            title: currentParsedData.title || "媒体下载",
-            videoUrl: streamInfo.videoUrl,
-            audioUrl: streamInfo.audioUrl,
-            referer: streamInfo.referer,
-            userAgent: streamInfo.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            title: taskTitle,
+            videoUrl: selectedStreamPayload.videoUrl,
+            audioUrl: selectedStreamPayload.audioUrl,
+            referer: selectedStreamPayload.referer,
+            userAgent: selectedStreamPayload.userAgent,
+            isAudio: !!selectedStreamPayload.isAudio
         };
 
         if (window.AndroidBridge && window.AndroidBridge.startDownload) {
@@ -360,7 +552,7 @@ btnDownload.addEventListener('click', () => {
 });
 
 // ==========================================================================
-// 5. Tasks Queue Progress Handling
+// 6. Tasks Queue Progress Handling
 // ==========================================================================
 window.onTaskAdded = function(id, title) {
     tasksMap[id] = { id, title, progress: 0, status: 'downloading', speed: '等待连接...' };
@@ -380,19 +572,19 @@ window.onTaskProgress = function(id, status, progress, speed, error) {
 
 function updateTaskUI() {
     const list = Object.values(tasksMap);
-    taskCount.textContent = list.length;
+    if (taskCount) taskCount.textContent = list.length;
     if (list.length === 0) {
         taskList.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">
-                    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                         <line x1="8" y1="21" x2="16" y2="21" />
                         <line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                 </div>
                 <p class="empty-title">队列空闲</p>
-                <p class="empty-desc">解析链接并选择清晰度后，点击下载即可后台高速保存</p>
+                <p class="empty-desc">解析视频后选择清晰度，下载即可后台极速写入手机相册</p>
             </div>
         `;
         return;
@@ -412,7 +604,7 @@ function updateTaskUI() {
             statusLabel = "写入手机媒体库...";
             statusClass = "status-merging";
         } else if (t.status === 'completed') {
-            statusLabel = "已存入系统相册";
+            statusLabel = "已存入系统相册/音乐库";
             statusClass = "status-completed";
             dotHtml = '✓';
         } else if (t.status === 'failed') {
@@ -607,7 +799,7 @@ function updateLoginStatusUI(isLoggedIn) {
 }
 
 // ==========================================================================
-// 7. Dynamic Island Toast System
+// 8. Dynamic Island Toast System
 // ==========================================================================
 function showToast(msg) {
     if (toastTimeout) {

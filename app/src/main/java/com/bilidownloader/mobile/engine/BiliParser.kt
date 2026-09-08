@@ -141,16 +141,30 @@ object BiliParser {
         null
     }
 
-    suspend fun resolveBvid(input: String): String? = withContext(Dispatchers.IO) {
+    data class BiliTarget(val bvid: String, val page: Int = 1, val cid: Long? = null)
+
+    suspend fun resolveTarget(input: String): BiliTarget? = withContext(Dispatchers.IO) {
         val trimmed = input.trim()
         val bvPattern = Pattern.compile("(?i)(BV[a-zA-Z0-9]{10})")
         val avPattern = Pattern.compile("(?i)\\bav(\\d+)\\b")
         val epPattern = Pattern.compile("(?i)\\bep(\\d+)\\b")
         val ssPattern = Pattern.compile("(?i)\\bss(\\d+)\\b")
+        val pagePattern = Pattern.compile("(?i)[?&]p=(\\d+)")
+        val cidPattern = Pattern.compile("(?i)[?&]cid=(\\d+)")
+
+        fun extractPage(s: String): Int {
+            val m = pagePattern.matcher(s)
+            return if (m.find()) m.group(1).toIntOrNull() ?: 1 else 1
+        }
+
+        fun extractCid(s: String): Long? {
+            val m = cidPattern.matcher(s)
+            return if (m.find()) m.group(1).toLongOrNull() else null
+        }
 
         val matcher = bvPattern.matcher(trimmed)
         if (matcher.find()) {
-            return@withContext matcher.group(1)
+            return@withContext BiliTarget(matcher.group(1), extractPage(trimmed), extractCid(trimmed))
         }
 
         // Handle b23.tv / bili2233.cn shortlinks (e.g. https://b23.tv/qSBLNyf)
@@ -175,22 +189,22 @@ object BiliParser {
                     if (!loc.isNullOrBlank()) {
                         val m2 = bvPattern.matcher(loc)
                         if (m2.find()) {
-                            return@withContext m2.group(1)
+                            return@withContext BiliTarget(m2.group(1), extractPage(loc), extractCid(loc))
                         }
                         val mAv = avPattern.matcher(loc)
                         if (mAv.find()) {
                             val bvid = resolveAidToBvid(mAv.group(1))
-                            if (bvid != null) return@withContext bvid
+                            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(loc), extractCid(loc))
                         }
                         val mEp = epPattern.matcher(loc)
                         if (mEp.find()) {
                             val bvid = resolveEpToBvid(mEp.group(1))
-                            if (bvid != null) return@withContext bvid
+                            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(loc), extractCid(loc))
                         }
                         val mSs = ssPattern.matcher(loc)
                         if (mSs.find()) {
                             val bvid = resolveSeasonToBvid(mSs.group(1))
-                            if (bvid != null) return@withContext bvid
+                            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(loc), extractCid(loc))
                         }
                         currentUrl = if (loc.startsWith("http")) loc else "https://$loc"
                         redirectCount++
@@ -200,17 +214,17 @@ object BiliParser {
                             val finalUrl = fullResp.request.url.toString()
                             val m3 = bvPattern.matcher(finalUrl)
                             if (m3.find()) {
-                                return@withContext m3.group(1)
+                                return@withContext BiliTarget(m3.group(1), extractPage(finalUrl), extractCid(finalUrl))
                             }
                             val mAv = avPattern.matcher(finalUrl)
                             if (mAv.find()) {
                                 val bvid = resolveAidToBvid(mAv.group(1))
-                                if (bvid != null) return@withContext bvid
+                                if (bvid != null) return@withContext BiliTarget(bvid, extractPage(finalUrl), extractCid(finalUrl))
                             }
                             val mEp = epPattern.matcher(finalUrl)
                             if (mEp.find()) {
                                 val bvid = resolveEpToBvid(mEp.group(1))
-                                if (bvid != null) return@withContext bvid
+                                if (bvid != null) return@withContext BiliTarget(bvid, extractPage(finalUrl), extractCid(finalUrl))
                             }
                         }
                         break
@@ -227,7 +241,7 @@ object BiliParser {
         if (avMatcher.find()) {
             val aid = avMatcher.group(1)
             val bvid = resolveAidToBvid(aid)
-            if (bvid != null) return@withContext bvid
+            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(trimmed), extractCid(trimmed))
         }
 
         // Direct ep ID
@@ -235,7 +249,7 @@ object BiliParser {
         if (epMatcher.find()) {
             val epId = epMatcher.group(1)
             val bvid = resolveEpToBvid(epId)
-            if (bvid != null) return@withContext bvid
+            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(trimmed), extractCid(trimmed))
         }
 
         // Direct ss ID
@@ -243,10 +257,14 @@ object BiliParser {
         if (ssMatcher.find()) {
             val ssId = ssMatcher.group(1)
             val bvid = resolveSeasonToBvid(ssId)
-            if (bvid != null) return@withContext bvid
+            if (bvid != null) return@withContext BiliTarget(bvid, extractPage(trimmed), extractCid(trimmed))
         }
 
         null
+    }
+
+    suspend fun resolveBvid(input: String): String? {
+        return resolveTarget(input)?.bvid
     }
 
     suspend fun getWbiKeys(cookies: String = ""): Pair<String, String> = withContext(Dispatchers.IO) {
@@ -290,7 +308,12 @@ object BiliParser {
         fallback
     }
 
-    suspend fun parseVideo(bvid: String, cookies: String = ""): JsonObject = withContext(Dispatchers.IO) {
+    suspend fun parseVideo(
+        bvid: String,
+        cookies: String = "",
+        targetPage: Int = 1,
+        targetCid: Long? = null
+    ): JsonObject = withContext(Dispatchers.IO) {
         val result = JsonObject()
         try {
             val buvid = ensureBuvid()
@@ -304,17 +327,20 @@ object BiliParser {
                 .header("Cookie", finalCookie)
                 .build()
 
-            val viewResp = client.newCall(req).execute()
-            val viewBody = viewResp.body?.string() ?: ""
-
-            if (!viewResp.isSuccessful || viewBody.trimStart().startsWith("<")) {
-                result.addProperty("success", false)
-                result.addProperty(
-                    "message",
-                    if (viewResp.code == 412) "B站触发安全拦截 (HTTP 412)，建议先点击右上角登录B站账号" 
-                    else "获取视频详情失败: HTTP ${viewResp.code}"
-                )
-                return@withContext result
+            var viewBody = ""
+            var viewCode = 200
+            client.newCall(req).execute().use { viewResp ->
+                viewCode = viewResp.code
+                viewBody = viewResp.body?.string() ?: ""
+                if (!viewResp.isSuccessful || viewBody.trimStart().startsWith("<")) {
+                    result.addProperty("success", false)
+                    result.addProperty(
+                        "message",
+                        if (viewResp.code == 412) "B站触发安全拦截 (HTTP 412)，建议先点击右上角登录B站账号" 
+                        else "获取视频详情失败: HTTP ${viewResp.code}"
+                    )
+                    return@withContext result
+                }
             }
 
             val viewJson = viewBody.parseAsJsonObject()
@@ -340,10 +366,41 @@ object BiliParser {
 
             val title = data.str("title", "未知标题") ?: "未知标题"
             val pic = data.str("pic", "") ?: ""
-            val cid = data.long("cid", 0L)
             val duration = data.long("duration", 0L)
             val owner = data.obj("owner")
             val author = owner.str("name", "B站UP主") ?: "B站UP主"
+
+            // Multi-part (分P) resolution
+            val pagesArr = data.arr("pages")
+            var activeCid = data.long("cid", 0L)
+            var activePartTitle = ""
+            var activePage = 1
+
+            if (pagesArr != null && pagesArr.size() > 0) {
+                if (targetCid != null && targetCid > 0) {
+                    for (p in pagesArr) {
+                        val pObj = p.asSafeObject()
+                        if (pObj != null && pObj.long("cid", 0L) == targetCid) {
+                            activeCid = targetCid
+                            activePartTitle = pObj.str("part") ?: ""
+                            activePage = pObj.int("page", 1)
+                            break
+                        }
+                    }
+                } else if (targetPage > 1 && targetPage <= pagesArr.size()) {
+                    val pObj = pagesArr.get(targetPage - 1).asSafeObject()
+                    if (pObj != null) {
+                        activeCid = pObj.long("cid", activeCid)
+                        activePartTitle = pObj.str("part") ?: ""
+                        activePage = targetPage
+                    }
+                } else {
+                    val firstObj = pagesArr.get(0).asSafeObject()
+                    if (firstObj != null) {
+                        activePartTitle = firstObj.str("part") ?: ""
+                    }
+                }
+            }
 
             var playData: JsonObject? = null
 
@@ -352,7 +409,7 @@ object BiliParser {
                 val (imgKey, subKey) = getWbiKeys(cookies)
                 val params = mutableMapOf(
                     "bvid" to bvid,
-                    "cid" to cid.toString(),
+                    "cid" to activeCid.toString(),
                     "qn" to "127",
                     "fnval" to "4048",
                     "fourk" to "1"
@@ -369,13 +426,14 @@ object BiliParser {
                     .header("Cookie", finalCookie)
                     .build()
 
-                val playResp = client.newCall(playReq).execute()
-                val playBody = playResp.body?.string() ?: ""
-                val playJson = playBody.parseAsJsonObject()
-                if (playJson != null && playJson.int("code", -1) == 0) {
-                    val pData = playJson.obj("data")
-                    if (pData != null && (pData.obj("dash") != null || pData.arr("durl") != null)) {
-                        playData = pData
+                client.newCall(playReq).execute().use { playResp ->
+                    val playBody = playResp.body?.string() ?: ""
+                    val playJson = playBody.parseAsJsonObject()
+                    if (playJson != null && playJson.int("code", -1) == 0) {
+                        val pData = playJson.obj("data")
+                        if (pData != null && (pData.obj("dash") != null || pData.arr("durl") != null)) {
+                            playData = pData
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -385,7 +443,7 @@ object BiliParser {
             // 2. Fallback to standard web playurl (no WBI required)
             if (playData == null) {
                 try {
-                    val fallbackPlayUrl = "https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$cid&qn=80&fnval=4048&fourk=1"
+                    val fallbackPlayUrl = "https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$activeCid&qn=80&fnval=4048&fourk=1"
                     val playReq = Request.Builder()
                         .url(fallbackPlayUrl)
                         .header("User-Agent", USER_AGENT)
@@ -393,13 +451,14 @@ object BiliParser {
                         .header("Cookie", finalCookie)
                         .build()
 
-                    val playResp = client.newCall(playReq).execute()
-                    val playBody = playResp.body?.string() ?: ""
-                    val playJson = playBody.parseAsJsonObject()
-                    if (playJson != null && playJson.int("code", -1) == 0) {
-                        val pData = playJson.obj("data")
-                        if (pData != null && (pData.obj("dash") != null || pData.arr("durl") != null)) {
-                            playData = pData
+                    client.newCall(playReq).execute().use { playResp ->
+                        val playBody = playResp.body?.string() ?: ""
+                        val playJson = playBody.parseAsJsonObject()
+                        if (playJson != null && playJson.int("code", -1) == 0) {
+                            val pData = playJson.obj("data")
+                            if (pData != null && (pData.obj("dash") != null || pData.arr("durl") != null)) {
+                                playData = pData
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -410,7 +469,7 @@ object BiliParser {
             // 3. Fallback to legacy single MP4 durl
             if (playData == null) {
                 try {
-                    val legacyPlayUrl = "https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$cid&qn=64&fnval=0"
+                    val legacyPlayUrl = "https://api.bilibili.com/x/player/playurl?bvid=$bvid&cid=$activeCid&qn=64&fnval=0"
                     val playReq = Request.Builder()
                         .url(legacyPlayUrl)
                         .header("User-Agent", USER_AGENT)
@@ -418,11 +477,12 @@ object BiliParser {
                         .header("Cookie", finalCookie)
                         .build()
 
-                    val playResp = client.newCall(playReq).execute()
-                    val playBody = playResp.body?.string() ?: ""
-                    val playJson = playBody.parseAsJsonObject()
-                    if (playJson != null && playJson.int("code", -1) == 0) {
-                        playData = playJson.obj("data")
+                    client.newCall(playReq).execute().use { playResp ->
+                        val playBody = playResp.body?.string() ?: ""
+                        val playJson = playBody.parseAsJsonObject()
+                        if (playJson != null && playJson.int("code", -1) == 0) {
+                            playData = playJson.obj("data")
+                        }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -438,13 +498,14 @@ object BiliParser {
             result.addProperty("success", true)
             result.addProperty("platform", "bilibili")
             result.addProperty("bvid", bvid)
-            result.addProperty("cid", cid)
+            result.addProperty("cid", activeCid)
+            result.addProperty("current_page", activePage)
+            result.addProperty("part_title", activePartTitle)
             result.addProperty("title", title)
             result.addProperty("pic", pic)
             result.addProperty("author", author)
             result.addProperty("duration", duration)
             result.add("play_data", playData)
-            val pagesArr = data.arr("pages")
             if (pagesArr != null) {
                 result.add("pages", pagesArr)
             }

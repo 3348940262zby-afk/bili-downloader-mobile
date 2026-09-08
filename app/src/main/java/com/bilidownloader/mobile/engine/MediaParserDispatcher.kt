@@ -28,9 +28,11 @@ object MediaParserDispatcher {
             "douyin" -> return DouyinParser.parse(input)
             "kuaishou" -> return KuaishouParser.parse(input)
             "bilibili" -> {
-                val bvid = BiliParser.resolveBvid(input)
-                if (bvid != null) {
-                    return BiliParser.parseVideo(bvid, cookies)
+                val target = BiliParser.resolveTarget(input)
+                if (target != null) {
+                    val pageParam = Regex("(?i)[?&]p=(\\d+)").find(input)?.groupValues?.get(1)?.toIntOrNull() ?: target.page
+                    val cidParam = Regex("(?i)[?&]cid=(\\d+)").find(input)?.groupValues?.get(1)?.toLongOrNull() ?: target.cid
+                    return BiliParser.parseVideo(target.bvid, cookies, targetPage = pageParam, targetCid = cidParam)
                 } else {
                     val res = JsonObject()
                     res.addProperty("success", false)
@@ -41,9 +43,11 @@ object MediaParserDispatcher {
         }
 
         // Fallback checks for unknown platform
-        val bvid = BiliParser.resolveBvid(input)
-        if (bvid != null) {
-            return BiliParser.parseVideo(bvid, cookies)
+        val fallbackTarget = BiliParser.resolveTarget(input)
+        if (fallbackTarget != null) {
+            val pageParam = Regex("(?i)[?&]p=(\\d+)").find(input)?.groupValues?.get(1)?.toIntOrNull() ?: fallbackTarget.page
+            val cidParam = Regex("(?i)[?&]cid=(\\d+)").find(input)?.groupValues?.get(1)?.toLongOrNull() ?: fallbackTarget.cid
+            return BiliParser.parseVideo(fallbackTarget.bvid, cookies, targetPage = pageParam, targetCid = cidParam)
         }
         if (DouyinParser.extractUrl(input) != null) {
             return DouyinParser.parse(input)

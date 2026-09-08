@@ -238,10 +238,10 @@ object DouyinParser {
                                     coverUrl = coverList.get(0).asString
                                 }
 
-                                // 3.1: Extract highest bitrate stream from bit_rate array
+                                // 3.1: Extract streams from bit_rate array and sort descending by bit_rate
                                 val bitRateArray = videoObj.arr("bit_rate")
-                                var maxBitrate: Long = -1L
-                                var bestBitrateUrl: String? = null
+                                data class DouyinStream(val bitRate: Long, val label: String, val url: String)
+                                val collectedStreams = mutableListOf<DouyinStream>()
 
                                 if (bitRateArray != null && bitRateArray.size() > 0) {
                                     for (elem in bitRateArray) {
@@ -253,33 +253,38 @@ object DouyinParser {
 
                                         if (urlList != null && urlList.size() > 0) {
                                             val streamUrl = urlList.get(0).asString.replace("playwm", "play")
-                                            if (br > maxBitrate) {
-                                                maxBitrate = br
-                                                bestBitrateUrl = streamUrl
-                                            }
-
-                                            val streamInfo = JsonObject()
                                             val label = when {
                                                 gear.contains("1080") || br >= 1_500_000 -> "1080P 超清"
                                                 gear.contains("720") || br >= 800_000 -> "720P 高清"
                                                 gear.contains("540") || br >= 400_000 -> "540P 清晰"
                                                 else -> "标清画质"
                                             }
-                                            streamInfo.addProperty("quality", label)
-                                            streamInfo.addProperty("bit_rate", br)
-                                            streamInfo.addProperty("url", streamUrl)
-                                            streamsArray.add(streamInfo)
+                                            collectedStreams.add(DouyinStream(br, label, streamUrl))
                                         }
                                     }
                                 }
 
-                                if (bestBitrateUrl != null) {
-                                    videoUrl = bestBitrateUrl
+                                // Sort descending: highest bitrate (1080P) first
+                                val sortedStreams = collectedStreams.sortedByDescending { it.bitRate }
+                                val seenQualities = mutableSetOf<String>()
+                                for (s in sortedStreams) {
+                                    if (seenQualities.add(s.label)) {
+                                        val streamInfo = JsonObject()
+                                        streamInfo.addProperty("quality", s.label)
+                                        streamInfo.addProperty("bit_rate", s.bitRate)
+                                        streamInfo.addProperty("url", s.url)
+                                        streamsArray.add(streamInfo)
+                                    }
+                                }
+
+                                if (sortedStreams.isNotEmpty()) {
+                                    videoUrl = sortedStreams.first().url
                                 } else {
                                     // Fallback to play_addr
                                     val playList = videoObj.obj("play_addr").arr("url_list")
                                     if (playList != null && playList.size() > 0) {
-                                        videoUrl = playList.get(0).asString.replace("playwm", "play")
+                                        val rawUrl = playList.get(0).asString.replace("playwm", "play")
+                                        videoUrl = rawUrl.replace("ratio=540p", "ratio=1080p").replace("ratio=720p", "ratio=1080p")
                                     }
                                 }
                             }
