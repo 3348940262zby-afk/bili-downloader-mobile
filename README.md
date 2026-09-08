@@ -21,7 +21,17 @@
 
 ---
 
-## 🚀 方式一：GitHub Actions 云端全自动编译（推荐，零本地配置）
+## 📦 直接下载安装包 (APK)
+
+最新已打包好的 APK 安装包已自动发布到 GitHub Releases：
+
+👉 **[点击直接前往下载最新 APK (GitHub Releases)](https://github.com/3348940262zby-afk/bili-downloader-mobile/releases)**
+
+手机浏览器打开上述链接，在最新版本的 **Assets** 展开列表中点击 **`BiliDownloaderMobile.apk`** 即可直接下载并安装到手机。
+
+---
+
+## 🚀 方式一：GitHub Actions 云端全自动编译与发布
 
 你不需要在电脑上下载十几 GB 的 Android SDK / NDK，利用已配置好的 `.github/workflows/build_apk.yml`，即可让 GitHub 云端服务器为你自动编译 APK。
 

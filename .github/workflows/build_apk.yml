@@ -59,11 +59,11 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: "v1.0.0"
+          tag_name: ${{ github.ref_name }}
+          name: "BiliDownloader Mobile ${{ github.ref_name }}"
           files: BiliDownloaderMobile.apk
-          name: "BiliDownloader Mobile v1.0.0"
           draft: false
           prerelease: false
           generate_release_notes: true
