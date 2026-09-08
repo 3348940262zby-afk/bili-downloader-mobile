@@ -36,7 +36,7 @@ object KuaishouParser {
         }
 
         try {
-            var finalUrl = targetUrl
+            var finalUrl: String = targetUrl
             val req = Request.Builder()
                 .url(targetUrl)
                 .header("User-Agent", MOBILE_UA)

@@ -74,7 +74,7 @@ object DouyinParser {
 
         try {
             // Step 1: Follow redirect
-            var finalUrl = targetUrl
+            var finalUrl: String = targetUrl
             val headReq = Request.Builder()
                 .url(targetUrl)
                 .header("User-Agent", MOBILE_UA)
