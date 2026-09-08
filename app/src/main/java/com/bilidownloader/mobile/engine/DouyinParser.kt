@@ -1,6 +1,8 @@
 package com.bilidownloader.mobile.engine
 
+import com.bilidownloader.mobile.util.*
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,12 +14,12 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 object DouyinParser {
-    private const val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
-    private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+    const val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(18, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -176,7 +178,8 @@ object DouyinParser {
             var videoUrl: String? = null
             var title = "抖音视频_$itemId"
             var coverUrl = ""
-            var author = "抖音用户"
+            var author = "抖音创作者"
+            val streamsArray = JsonArray()
 
             // Step 3: Extract JSON from window._ROUTER_DATA or script tags
             try {
@@ -205,50 +208,88 @@ object DouyinParser {
                 }
 
                 if (!rawJson.isNullOrBlank()) {
-                    val root = gson.fromJson(rawJson, JsonObject::class.java)
-                    val loaderData = root?.getAsJsonObject("loaderData")
+                    val root = rawJson.parseAsJsonObject()
+                    val loaderData = root.obj("loaderData")
                     if (loaderData != null) {
-                        // Find entry that actually contains videoInfoRes (prevent picking null video_layout)
                         var videoData: JsonObject? = null
                         for (entry in loaderData.entrySet()) {
-                            if (entry.value.isJsonObject) {
-                                val itemObj = entry.value.asJsonObject
-                                if (itemObj.has("videoInfoRes")) {
-                                    val vir = itemObj.getAsJsonObject("videoInfoRes")
-                                    val itemList = vir.getAsJsonArray("item_list")
-                                    if (itemList != null && itemList.size() > 0 && itemList.get(0).isJsonObject) {
-                                        videoData = itemList.get(0).asJsonObject
-                                        break
-                                    }
+                            val itemObj = entry.value.asSafeObject()
+                            if (itemObj != null && itemObj.has("videoInfoRes")) {
+                                val vir = itemObj.obj("videoInfoRes")
+                                val itemList = vir.arr("item_list")
+                                if (itemList != null && itemList.size() > 0) {
+                                    videoData = itemList.get(0).asSafeObject()
+                                    if (videoData != null) break
                                 }
                             }
                         }
 
                         if (videoData != null) {
-                            title = videoData.get("desc")?.asString ?: title
-                            val authorObj = videoData.getAsJsonObject("author")
-                            if (authorObj != null && authorObj.has("nickname")) {
-                                author = authorObj.get("nickname").asString
+                            title = videoData.str("desc") ?: title
+                            val authorObj = videoData.obj("author")
+                            if (authorObj != null) {
+                                author = authorObj.str("nickname") ?: author
                             }
 
-                            val videoObj = videoData.getAsJsonObject("video")
+                            val videoObj = videoData.obj("video")
                             if (videoObj != null) {
-                                val coverList = videoObj.getAsJsonObject("cover")?.getAsJsonArray("url_list")
+                                val coverList = videoObj.obj("cover").arr("url_list")
                                 if (coverList != null && coverList.size() > 0) {
                                     coverUrl = coverList.get(0).asString
                                 }
-                                val playList = videoObj.getAsJsonObject("play_addr")?.getAsJsonArray("url_list")
-                                if (playList != null && playList.size() > 0) {
-                                    videoUrl = playList.get(0).asString.replace("playwm", "play")
+
+                                // 3.1: Extract highest bitrate stream from bit_rate array
+                                val bitRateArray = videoObj.arr("bit_rate")
+                                var maxBitrate: Long = -1L
+                                var bestBitrateUrl: String? = null
+
+                                if (bitRateArray != null && bitRateArray.size() > 0) {
+                                    for (elem in bitRateArray) {
+                                        val bitObj = elem.asSafeObject() ?: continue
+                                        val br = bitObj.long("bit_rate", 0L)
+                                        val gear = bitObj.str("gear_name") ?: "normal"
+                                        val playAddr = bitObj.obj("play_addr")
+                                        val urlList = playAddr.arr("url_list")
+
+                                        if (urlList != null && urlList.size() > 0) {
+                                            val streamUrl = urlList.get(0).asString.replace("playwm", "play")
+                                            if (br > maxBitrate) {
+                                                maxBitrate = br
+                                                bestBitrateUrl = streamUrl
+                                            }
+
+                                            val streamInfo = JsonObject()
+                                            val label = when {
+                                                gear.contains("1080") || br >= 1_500_000 -> "1080P 超清"
+                                                gear.contains("720") || br >= 800_000 -> "720P 高清"
+                                                gear.contains("540") || br >= 400_000 -> "540P 清晰"
+                                                else -> "标清画质"
+                                            }
+                                            streamInfo.addProperty("quality", label)
+                                            streamInfo.addProperty("bit_rate", br)
+                                            streamInfo.addProperty("url", streamUrl)
+                                            streamsArray.add(streamInfo)
+                                        }
+                                    }
+                                }
+
+                                if (bestBitrateUrl != null) {
+                                    videoUrl = bestBitrateUrl
+                                } else {
+                                    // Fallback to play_addr
+                                    val playList = videoObj.obj("play_addr").arr("url_list")
+                                    if (playList != null && playList.size() > 0) {
+                                        videoUrl = playList.get(0).asString.replace("playwm", "play")
+                                    }
                                 }
                             }
 
-                            // Check images/images_list for note/photo gallery posts
+                            // Check images for photo gallery posts
                             if (videoUrl == null && videoData.has("images")) {
-                                val imagesArr = videoData.getAsJsonArray("images")
-                                if (imagesArr != null && imagesArr.size() > 0 && imagesArr.get(0).isJsonObject) {
-                                    val firstImg = imagesArr.get(0).asJsonObject
-                                    val urlList = firstImg.getAsJsonArray("url_list")
+                                val imagesArr = videoData.arr("images")
+                                if (imagesArr != null && imagesArr.size() > 0) {
+                                    val firstImg = imagesArr.get(0).asSafeObject()
+                                    val urlList = firstImg.arr("url_list")
                                     if (urlList != null && urlList.size() > 0) {
                                         coverUrl = urlList.get(0).asString
                                         videoUrl = urlList.get(0).asString
@@ -289,6 +330,9 @@ object DouyinParser {
                 result.addProperty("pic", coverUrl)
                 result.addProperty("direct_video_url", videoUrl)
                 result.addProperty("item_id", itemId)
+                if (streamsArray.size() > 0) {
+                    result.add("streams", streamsArray)
+                }
             } else {
                 result.addProperty("success", false)
                 result.addProperty("message", "未能获取到抖音无水印直链，请检查链接或稍后重试")

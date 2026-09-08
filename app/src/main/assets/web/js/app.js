@@ -1,4 +1,6 @@
+// ==========================================================================
 // DOM Elements
+// ==========================================================================
 const urlInput = document.getElementById('url-input');
 const btnClear = document.getElementById('btn-clear');
 const btnPaste = document.getElementById('btn-paste');
@@ -16,6 +18,7 @@ const previewTitle = document.getElementById('preview-title');
 const previewAuthor = document.getElementById('preview-author');
 const previewPlatform = document.getElementById('preview-platform');
 const qualitySelect = document.getElementById('quality-select');
+const qualityHint = document.getElementById('quality-hint');
 const btnDownload = document.getElementById('btn-download');
 
 const taskList = document.getElementById('task-list');
@@ -23,17 +26,30 @@ const taskCount = document.getElementById('task-count');
 
 const btnLogin = document.getElementById('btn-login');
 const userStatusText = document.getElementById('user-status-text');
-const qrModal = document.getElementById('qr-modal');
+
+// Modal Elements
+const loginModal = document.getElementById('login-modal');
 const btnCloseModal = document.getElementById('btn-close-modal');
+const tabWebLogin = document.getElementById('tab-web-login');
+const tabQrLogin = document.getElementById('tab-qr-login');
+const viewWebLogin = document.getElementById('view-web-login');
+const viewQrLogin = document.getElementById('view-qr-login');
+const btnStartWebLogin = document.getElementById('btn-start-web-login');
 const qrImage = document.getElementById('qr-image');
 const qrLoading = document.getElementById('qr-loading');
 const qrStatus = document.getElementById('qr-status');
+const btnSaveQr = document.getElementById('btn-save-qr');
+const btnOpenBili = document.getElementById('btn-open-bili');
 const btnRefreshQr = document.getElementById('btn-refresh-qr');
+
+// Dynamic Island Toast Elements
 const toastEl = document.getElementById('toast');
+const toastMsg = document.getElementById('toast-msg');
 
 let currentParsedData = null;
 let qrPollInterval = null;
 let currentQrKey = null;
+let currentQrUrl = null;
 let toastTimeout = null;
 const tasksMap = {};
 
@@ -93,22 +109,22 @@ btnPaste.addEventListener('click', () => {
         if (text && text.trim().length > 0) {
             urlInput.value = text.trim();
             handleInputChanges();
-            showToast("已自动读取剪贴板");
+            showToast("已自动读取剪贴板内容");
         } else {
-            showToast("剪贴板为空");
+            showToast("剪贴板中暂无文本");
         }
     } else if (navigator.clipboard && navigator.clipboard.readText) {
         navigator.clipboard.readText().then(text => {
             if (text && text.trim().length > 0) {
                 urlInput.value = text.trim();
                 handleInputChanges();
-                showToast("已自动读取剪贴板");
+                showToast("已自动读取剪贴板内容");
             } else {
-                showToast("剪贴板为空");
+                showToast("剪贴板中暂无文本");
             }
-        }).catch(() => showToast("无法直接访问剪贴板"));
+        }).catch(() => showToast("请长按输入框进行粘贴"));
     } else {
-        showToast("请手动在输入框中粘贴");
+        showToast("请长按输入框进行粘贴");
     }
 });
 
@@ -116,7 +132,7 @@ window.onShareReceived = function(sharedText) {
     if (!sharedText) return;
     urlInput.value = sharedText.trim();
     handleInputChanges();
-    showToast("收到系统分享，开始解析...");
+    showToast("检测到外部分享，正在解析...");
     triggerParse();
 };
 
@@ -133,7 +149,7 @@ function setParseLoading(loading) {
         btnParse.disabled = false;
         parseSpinner.classList.add('hidden');
         if (parseIcon) parseIcon.classList.remove('hidden');
-        parseText.textContent = "开始解析";
+        parseText.textContent = "智能提取";
     }
 }
 
@@ -148,10 +164,9 @@ function triggerParse() {
     if (window.AndroidBridge && window.AndroidBridge.parseUrl) {
         window.AndroidBridge.parseUrl(input);
     } else {
-        // Fallback for browser testing
         setTimeout(() => {
             setParseLoading(false);
-            showToast("原生通信通道就绪 (调试预览)");
+            showToast("原生接口调试预览模式");
         }, 800);
     }
 }
@@ -168,7 +183,7 @@ window.onParseResult = function(rawJson) {
             return;
         }
         renderPreview(res);
-        showToast("解析成功！已自动加载原画流");
+        showToast("解析成功！已自动优选最高画质");
     } catch (e) {
         showToast("解析异常: " + e.message);
     }
@@ -186,7 +201,7 @@ function renderPreview(data) {
     previewCard.classList.remove('hidden');
 
     previewTitle.textContent = data.title || "未知标题";
-    previewAuthor.textContent = data.author || "媒体作者";
+    previewAuthor.textContent = data.author || "媒体创作者";
     previewCover.src = data.pic || "";
     previewDuration.textContent = formatDuration(data.duration);
 
@@ -196,68 +211,120 @@ function renderPreview(data) {
     // Populate quality options
     qualitySelect.innerHTML = '';
 
-    if (platform === 'bilibili' && data.play_data && data.play_data.dash) {
-        const dash = data.play_data.dash;
-        const videos = dash.video || [];
-        const audios = dash.audio || [];
-        const bestAudio = audios.length > 0 ? (audios[0].baseUrl || audios[0].base_url) : null;
+    if (platform === 'bilibili' && data.play_data) {
+        const playData = data.play_data;
+        const dash = playData.dash;
 
-        const qnMap = {
-            127: "8K 超高清",
-            126: "杜比视界 (Dolby Vision)",
-            125: "HDR 真彩",
-            120: "4K 超清",
-            116: "1080P 60帧",
-            112: "1080P 高码率",
-            80: "1080P 高清",
-            64: "720P 高清",
-            32: "480P 清晰"
-        };
+        if (dash) {
+            const videos = dash.video || [];
+            const audios = dash.audio || [];
+            const bestAudio = audios.length > 0 ? (audios[0].baseUrl || audios[0].base_url) : null;
 
-        const addedKeys = new Set();
-        videos.forEach(v => {
-            const qn = v.id;
-            const codec = (v.codecs && v.codecs.startsWith('hev')) ? 'HEVC' : ((v.codecs && v.codecs.startsWith('avc')) ? 'AVC' : 'AV01');
-            const key = `${qn}_${codec}`;
-            if (!addedKeys.has(key)) {
-                addedKeys.add(key);
+            const qnMap = {
+                127: "8K 超高清 (大会员)",
+                126: "杜比视界 Dolby Vision (大会员)",
+                125: "HDR 真彩 (大会员)",
+                120: "4K 超清 (大会员)",
+                116: "1080P 60帧 (大会员)",
+                112: "1080P 高码率 (大会员)",
+                80: "1080P 高清",
+                64: "720P 高清",
+                32: "480P 清晰",
+                16: "360P 极速"
+            };
+
+            const addedKeys = new Set();
+            videos.forEach(v => {
+                const qn = v.id;
+                const codec = (v.codecs && v.codecs.startsWith('hev')) ? 'HEVC' : ((v.codecs && v.codecs.startsWith('avc')) ? 'AVC' : 'AV01');
+                const key = `${qn}_${codec}`;
+                if (!addedKeys.has(key)) {
+                    addedKeys.add(key);
+                    const opt = document.createElement('option');
+                    opt.value = JSON.stringify({
+                        videoUrl: v.baseUrl || v.base_url,
+                        audioUrl: bestAudio,
+                        referer: "https://www.bilibili.com/",
+                        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    });
+                    const qnLabel = qnMap[qn] || `画质 ${qn}`;
+                    opt.textContent = `${qnLabel} · [${codec}]`;
+                    qualitySelect.appendChild(opt);
+                }
+            });
+
+            // Add audio-only extraction option
+            if (bestAudio) {
+                const optAudio = document.createElement('option');
+                optAudio.value = JSON.stringify({
+                    videoUrl: bestAudio,
+                    audioUrl: null,
+                    referer: "https://www.bilibili.com/",
+                    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                });
+                optAudio.textContent = "仅提取音频流 (高音质 M4A / 音乐库)";
+                qualitySelect.appendChild(optAudio);
+            }
+        } else if (playData.durl && playData.durl.length > 0) {
+            // Legacy single mp4 durl
+            const first = playData.durl[0];
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({
+                videoUrl: first.url,
+                audioUrl: null,
+                referer: "https://www.bilibili.com/",
+                userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            });
+            opt.textContent = "高清标准流 (MP4 单文件)";
+            qualitySelect.appendChild(opt);
+        }
+
+    } else if (platform === 'douyin') {
+        const streams = data.streams || [];
+        if (streams.length > 0) {
+            streams.forEach((s, idx) => {
                 const opt = document.createElement('option');
                 opt.value = JSON.stringify({
-                    videoUrl: v.baseUrl || v.base_url,
-                    audioUrl: bestAudio,
-                    referer: "https://www.bilibili.com/"
+                    videoUrl: s.url,
+                    audioUrl: null,
+                    referer: "https://www.douyin.com/",
+                    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
                 });
-                const qnLabel = qnMap[qn] || `画质 ${qn}`;
-                opt.textContent = `${qnLabel} (${codec})`;
+                const brLabel = s.bit_rate ? ` (${Math.round(s.bit_rate / 1024)} kbps)` : '';
+                opt.textContent = `${s.quality || '超清画质'}${brLabel} · 无水印`;
+                if (idx === 0) opt.selected = true;
                 qualitySelect.appendChild(opt);
-            }
-        });
-
-        // Add audio-only option
-        if (bestAudio) {
-            const optAudio = document.createElement('option');
-            optAudio.value = JSON.stringify({
-                videoUrl: bestAudio,
-                audioUrl: null,
-                referer: "https://www.bilibili.com/"
             });
-            optAudio.textContent = "仅提取音频 (高音质 M4A/MP3)";
-            qualitySelect.appendChild(optAudio);
+        } else if (data.direct_video_url) {
+            const opt = document.createElement('option');
+            opt.value = JSON.stringify({
+                videoUrl: data.direct_video_url,
+                audioUrl: null,
+                referer: "https://www.douyin.com/",
+                userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
+            });
+            opt.textContent = "原画超清 (无水印 MP4)";
+            qualitySelect.appendChild(opt);
         }
 
     } else if (data.direct_video_url) {
-        // Direct MP4 (Douyin / Kuaishou)
+        // Direct MP4 (Kuaishou)
         const opt = document.createElement('option');
         opt.value = JSON.stringify({
             videoUrl: data.direct_video_url,
             audioUrl: null,
-            referer: platform === 'douyin' ? "https://www.douyin.com/" : "https://v.kuaishou.com/"
+            referer: "https://v.kuaishou.com/",
+            userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15"
         });
         opt.textContent = "原画超清 (无水印 MP4)";
         qualitySelect.appendChild(opt);
     }
 
-    // Scroll to preview card smoothly
+    if (qualityHint) {
+        qualityHint.textContent = `共 ${qualitySelect.options.length} 档规格`;
+    }
+
+    // Scroll smoothly to preview
     previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -267,7 +334,10 @@ function renderPreview(data) {
 btnDownload.addEventListener('click', () => {
     if (!currentParsedData) return;
     const selectedValue = qualitySelect.value;
-    if (!selectedValue) return;
+    if (!selectedValue) {
+        showToast("请先选择导出规格");
+        return;
+    }
 
     try {
         const streamInfo = JSON.parse(selectedValue);
@@ -275,13 +345,14 @@ btnDownload.addEventListener('click', () => {
             title: currentParsedData.title || "媒体下载",
             videoUrl: streamInfo.videoUrl,
             audioUrl: streamInfo.audioUrl,
-            referer: streamInfo.referer
+            referer: streamInfo.referer,
+            userAgent: streamInfo.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         };
 
         if (window.AndroidBridge && window.AndroidBridge.startDownload) {
             window.AndroidBridge.startDownload(JSON.stringify(taskPayload));
         } else {
-            showToast("原生下载服务未连接");
+            showToast("原生下载服务未连接 (测试模式)");
         }
     } catch (e) {
         showToast("创建下载异常: " + e.message);
@@ -289,10 +360,10 @@ btnDownload.addEventListener('click', () => {
 });
 
 // ==========================================================================
-// 5. Tasks Progress Handling
+// 5. Tasks Queue Progress Handling
 // ==========================================================================
 window.onTaskAdded = function(id, title) {
-    tasksMap[id] = { id, title, progress: 0, status: 'pending', speed: '' };
+    tasksMap[id] = { id, title, progress: 0, status: 'downloading', speed: '等待连接...' };
     updateTaskUI();
 };
 
@@ -320,8 +391,8 @@ function updateTaskUI() {
                         <line x1="12" y1="17" x2="12" y2="21" />
                     </svg>
                 </div>
-                <p class="empty-title">队列暂无任务</p>
-                <p class="empty-desc">解析视频后选择心仪画质，即可一键下载到相册</p>
+                <p class="empty-title">队列空闲</p>
+                <p class="empty-desc">解析链接并选择清晰度后，点击下载即可后台高速保存</p>
             </div>
         `;
         return;
@@ -335,13 +406,13 @@ function updateTaskUI() {
         if (t.status === 'downloading') {
             statusLabel = `下载中 ${t.progress}%`;
         } else if (t.status === 'merging') {
-            statusLabel = "合并音视频...";
+            statusLabel = "无损音视频混流...";
             statusClass = "status-merging";
         } else if (t.status === 'saving') {
-            statusLabel = "存入相册...";
+            statusLabel = "写入手机媒体库...";
             statusClass = "status-merging";
         } else if (t.status === 'completed') {
-            statusLabel = "已存入相册";
+            statusLabel = "已存入系统相册";
             statusClass = "status-completed";
             dotHtml = '✓';
         } else if (t.status === 'failed') {
@@ -363,7 +434,7 @@ function updateTaskUI() {
                 </div>
                 <div class="task-footer">
                     <span>${t.speed || ''}</span>
-                    <span>${t.error || ''}</span>
+                    <span style="color: var(--danger)">${t.error || ''}</span>
                 </div>
             </div>
         `;
@@ -371,18 +442,63 @@ function updateTaskUI() {
 }
 
 // ==========================================================================
-// 6. QR Code Login Modal
+// 6. Dual-Mode Bilibili Login Bottom Sheet
 // ==========================================================================
 btnLogin.addEventListener('click', () => {
-    qrModal.classList.remove('hidden');
-    requestQrCode();
+    loginModal.classList.remove('hidden');
+    // Default to Web Login tab
+    switchTab('web');
 });
 
 btnCloseModal.addEventListener('click', () => {
-    qrModal.classList.add('hidden');
+    loginModal.classList.add('hidden');
     stopQrPolling();
 });
 
+// Close modal when clicking backdrop
+loginModal.addEventListener('click', (e) => {
+    if (e.target === loginModal) {
+        loginModal.classList.add('hidden');
+        stopQrPolling();
+    }
+});
+
+function switchTab(mode) {
+    if (mode === 'web') {
+        tabWebLogin.classList.add('active');
+        tabQrLogin.classList.remove('active');
+        viewWebLogin.classList.remove('hidden');
+        viewQrLogin.classList.add('hidden');
+        stopQrPolling();
+    } else {
+        tabQrLogin.classList.add('active');
+        tabWebLogin.classList.remove('active');
+        viewQrLogin.classList.remove('hidden');
+        viewWebLogin.classList.add('hidden');
+        requestQrCode();
+    }
+}
+
+tabWebLogin.addEventListener('click', () => switchTab('web'));
+tabQrLogin.addEventListener('click', () => switchTab('qr'));
+
+// Mode 1: In-App Web Login
+btnStartWebLogin.addEventListener('click', () => {
+    loginModal.classList.add('hidden');
+    if (window.AndroidBridge && window.AndroidBridge.openWebLogin) {
+        window.AndroidBridge.openWebLogin();
+    } else {
+        showToast("正在启动内置安全登录窗口...");
+    }
+});
+
+// Called when in-app web login finishes
+window.onLoginSuccess = function(cookies) {
+    updateLoginStatusUI(true);
+    showToast("B站登录成功！已解锁 4K/大会员 画质");
+};
+
+// Mode 2: Enhanced QR Code Login
 function requestQrCode() {
     qrLoading.classList.remove('hidden');
     qrImage.classList.add('hidden');
@@ -398,18 +514,19 @@ window.onQrCodeResult = function(rawJson) {
         const res = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
         if (res.code === 0 && res.data && res.data.url) {
             currentQrKey = res.data.qrcode_key;
-            qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(res.data.url)}`;
+            currentQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(res.data.url)}`;
+            qrImage.src = currentQrUrl;
             qrImage.onload = () => {
                 qrLoading.classList.add('hidden');
                 qrImage.classList.remove('hidden');
-                qrStatus.textContent = "请打开 哔哩哔哩手机客户端 扫码确认";
+                qrStatus.textContent = "请使用 哔哩哔哩手机客户端 扫码确认";
                 startQrPolling(currentQrKey);
             };
         } else {
-            qrStatus.textContent = "获取二维码失败，请重试";
+            qrStatus.textContent = "获取二维码失败，请刷新重试";
         }
     } catch (e) {
-        qrStatus.textContent = "解析异常: " + e.message;
+        qrStatus.textContent = "生成异常: " + e.message;
     }
 };
 
@@ -419,7 +536,7 @@ function startQrPolling(key) {
         if (window.AndroidBridge && window.AndroidBridge.pollQrCode) {
             window.AndroidBridge.pollQrCode(key);
         }
-    }, 2000);
+    }, 2500);
 }
 
 function stopQrPolling() {
@@ -438,18 +555,18 @@ window.onQrPollResult = function(rawJson) {
         if (code === 0) {
             // Success
             stopQrPolling();
-            qrStatus.textContent = "登录成功！";
+            qrStatus.textContent = "授权成功！已同步大会员凭证";
             showToast("B站登录成功，已解锁 4K/大会员 画质！");
             updateLoginStatusUI(true);
             setTimeout(() => {
-                qrModal.classList.add('hidden');
+                loginModal.classList.add('hidden');
             }, 1200);
         } else if (code === 86038) {
             // Expired
             stopQrPolling();
             qrStatus.textContent = "二维码已过期，请点击刷新";
         } else if (code === 86090) {
-            qrStatus.textContent = "已扫码，请在手机端点击确认登录";
+            qrStatus.textContent = "已扫码，请在手机端点击【确认登录】";
         }
     } catch (e) {
         console.error(e);
@@ -457,6 +574,26 @@ window.onQrPollResult = function(rawJson) {
 };
 
 btnRefreshQr.addEventListener('click', requestQrCode);
+
+btnSaveQr.addEventListener('click', () => {
+    if (!currentQrUrl) {
+        showToast("二维码尚未就绪");
+        return;
+    }
+    if (window.AndroidBridge && window.AndroidBridge.saveQrImage) {
+        window.AndroidBridge.saveQrImage(currentQrUrl);
+    } else {
+        showToast("已触发保存二维码到相册");
+    }
+});
+
+btnOpenBili.addEventListener('click', () => {
+    if (window.AndroidBridge && window.AndroidBridge.openBilibiliApp) {
+        window.AndroidBridge.openBilibiliApp();
+    } else {
+        showToast("正在尝试唤起哔哩哔哩APP...");
+    }
+});
 
 function updateLoginStatusUI(isLoggedIn) {
     const indicator = document.querySelector('.status-indicator');
@@ -470,26 +607,22 @@ function updateLoginStatusUI(isLoggedIn) {
 }
 
 // ==========================================================================
-// 7. Toast Notification System
+// 7. Dynamic Island Toast System
 // ==========================================================================
 function showToast(msg) {
     if (toastTimeout) {
         clearTimeout(toastTimeout);
         toastTimeout = null;
     }
-    toastEl.textContent = msg;
+    toastMsg.textContent = msg;
     toastEl.classList.remove('hidden');
 
     toastTimeout = setTimeout(() => {
         toastEl.classList.add('hidden');
-    }, 2400);
-
-    if (window.AndroidBridge && window.AndroidBridge.showToast) {
-        window.AndroidBridge.showToast(msg);
-    }
+    }, 2600);
 }
 
-// Initial status check
+// Check initial stored cookies on startup
 window.addEventListener('DOMContentLoaded', () => {
     if (window.AndroidBridge && window.AndroidBridge.getStoredCookies) {
         const c = window.AndroidBridge.getStoredCookies();

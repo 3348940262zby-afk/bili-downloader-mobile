@@ -9,17 +9,15 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.bilidownloader.mobile.R
 import com.bilidownloader.mobile.util.GalleryHelper
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -44,8 +42,10 @@ class DownloadService : Service() {
     private var progressListener: ((String, DownloadTask) -> Unit)? = null
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     inner class LocalBinder : Binder() {
@@ -89,7 +89,7 @@ class DownloadService : Service() {
             // 1. Download video track
             val videoSuccess = downloadFile(task.videoUrl, tempVideoFile, task.referer, task.userAgent) { bytesRead, totalBytes, speedStr ->
                 val ratio = if (hasAudioStream) 0.8f else 1.0f
-                val p = if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * 100 * ratio).toInt() else 0
+                val p = if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * 100 * ratio).toInt().coerceIn(0, 80) else 50
                 task.progress = p
                 task.speed = speedStr
                 updateNotification(task.title, "下载视频流: $p% ($speedStr)", p)
@@ -98,7 +98,7 @@ class DownloadService : Service() {
 
             if (!videoSuccess) {
                 task.status = "failed"
-                task.errorMessage = "下载视频流失败"
+                task.errorMessage = "下载视频流失败 (网络中断或链接失效)"
                 notifyTaskUpdated(task)
                 return
             }
@@ -106,7 +106,7 @@ class DownloadService : Service() {
             // 2. Download audio track if separate (Bilibili DASH)
             if (hasAudioStream && task.audioUrl != null) {
                 val audioSuccess = downloadFile(task.audioUrl, tempAudioFile, task.referer, task.userAgent) { bytesRead, totalBytes, speedStr ->
-                    val p = 80 + if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * 15).toInt() else 0
+                    val p = 80 + if (totalBytes > 0) ((bytesRead.toFloat() / totalBytes.toFloat()) * 15).toInt().coerceIn(0, 15) else 10
                     task.progress = p
                     task.speed = speedStr
                     updateNotification(task.title, "下载音频流: $p%", p)
@@ -150,7 +150,7 @@ class DownloadService : Service() {
             if (savedUri != null) {
                 task.status = "completed"
                 task.progress = 100
-                val msg = if (isAudioOnly) "下载完成，已存入音乐库！" else "下载完成，已存入相册！"
+                val msg = if (isAudioOnly) "下载完成，已存入系统音乐库！" else "下载完成，已存入手机相册！"
                 updateNotification(task.title, msg, 100)
                 notifyTaskUpdated(task)
             } else {
@@ -165,9 +165,9 @@ class DownloadService : Service() {
             task.errorMessage = e.message ?: "未知下载错误"
             notifyTaskUpdated(task)
         } finally {
-            tempVideoFile.delete()
-            tempAudioFile.delete()
-            tempMergedFile.delete()
+            try { tempVideoFile.delete() } catch (_: Exception) {}
+            try { tempAudioFile.delete() } catch (_: Exception) {}
+            try { tempMergedFile.delete() } catch (_: Exception) {}
         }
     }
 
@@ -182,11 +182,16 @@ class DownloadService : Service() {
             .url(url)
             .header("Referer", referer)
             .header("User-Agent", userAgent)
+            .header("Accept", "*/*")
+            .header("Accept-Encoding", "identity")
             .build()
 
         try {
             httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return false
+                if (!resp.isSuccessful) {
+                    Log.e("DownloadService", "Download response code not successful: ${resp.code} for $url")
+                    return false
+                }
                 val body = resp.body ?: return false
                 val totalBytes = body.contentLength()
 
@@ -207,8 +212,8 @@ class DownloadService : Service() {
                             bytesSinceLast += read
 
                             val now = System.currentTimeMillis()
-                            if (now - lastTime >= 500) {
-                                val speedBps = (bytesSinceLast * 1000) / (now - lastTime)
+                            if (now - lastTime >= 400) {
+                                val speedBps = (bytesSinceLast * 1000) / (now - lastTime).coerceAtLeast(1)
                                 val speedStr = if (speedBps > 1024 * 1024) {
                                     String.format("%.1f MB/s", speedBps / (1024f * 1024f))
                                 } else {
@@ -222,6 +227,16 @@ class DownloadService : Service() {
                         }
                         output.flush()
                     }
+                }
+
+                // Verify completed file
+                if (totalBytes > 0 && bytesCopied < totalBytes) {
+                    Log.e("DownloadService", "Downloaded size $bytesCopied less than contentLength $totalBytes")
+                    return false
+                }
+                if (targetFile.length() < 1024) {
+                    Log.e("DownloadService", "Downloaded file too small (${targetFile.length()} bytes)")
+                    return false
                 }
                 return true
             }

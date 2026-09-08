@@ -7,22 +7,32 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div id="toast" class="toast hidden"></div>
+    <!-- Floating Dynamic Island Toast -->
+    <div id="toast" class="toast hidden">
+        <span class="toast-dot"></span>
+        <span id="toast-msg">提示信息</span>
+    </div>
+
+    <!-- Background Ambient Aura -->
+    <div class="ambient-glow"></div>
 
     <div class="app-container">
         <!-- Top App Bar -->
         <header class="top-nav">
             <div class="brand">
                 <div class="logo-mark">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
                     </svg>
                 </div>
                 <div class="brand-info">
-                    <h1 class="app-title">BiliDownloader</h1>
-                    <p class="app-subtitle">多平台高清媒体提取</p>
+                    <div class="brand-title-row">
+                        <h1 class="app-title">BiliDownloader</h1>
+                        <span class="version-tag">PRO</span>
+                    </div>
+                    <p class="app-subtitle">多平台全画质无损提取 · 原画直存</p>
                 </div>
             </div>
 
@@ -36,28 +46,32 @@
 
         <!-- Main Workspace -->
         <main class="content">
-            <!-- Search / Input Card -->
+            <!-- Search & Input Card -->
             <section class="card input-card">
                 <div class="input-header">
-                    <span class="section-label">媒体链接</span>
+                    <div class="header-tag">
+                        <span class="pulse-sparkle">✦</span>
+                        <span>分享链接解析</span>
+                    </div>
                     <div id="platform-badge" class="platform-badge hidden">
                         <span class="platform-dot"></span>
-                        <span id="platform-badge-text">未知平台</span>
+                        <span id="platform-badge-text">识别中</span>
                     </div>
                 </div>
 
                 <div class="input-box">
-                    <textarea id="url-input" placeholder="输入或粘贴 B站、抖音、快手 的视频地址或分享文案..." rows="3" spellcheck="false"></textarea>
-                    <button id="btn-clear" class="clear-btn hidden" title="清空内容">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    <textarea id="url-input" placeholder="输入或粘贴 B站 (BV/b23)、抖音、快手 的分享短链或完整文案..." rows="3" spellcheck="false"></textarea>
+                    <button id="btn-clear" class="clear-btn hidden" title="清空内容" aria-label="清空">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
                 </div>
 
                 <div class="action-toolbar">
                     <button id="btn-paste" class="btn btn-secondary">
-                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                             <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                         </svg>
@@ -65,15 +79,15 @@
                     </button>
                     <button id="btn-parse" class="btn btn-primary">
                         <span id="parse-spinner" class="spinner hidden"></span>
-                        <svg id="parse-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg id="parse-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                             <polygon points="5 3 19 12 5 21 5 3" />
                         </svg>
-                        <span id="parse-text">开始解析</span>
+                        <span id="parse-text">智能提取</span>
                     </button>
                 </div>
             </section>
 
-            <!-- Video Preview Card -->
+            <!-- Media Preview Card -->
             <section id="preview-card" class="card preview-card hidden">
                 <div class="preview-media-container">
                     <img id="preview-cover" src="" alt="封面" loading="lazy">
@@ -83,11 +97,11 @@
                 </div>
 
                 <div class="preview-details">
-                    <h2 id="preview-title" class="video-title">视频标题</h2>
+                    <h2 id="preview-title" class="video-title">媒体标题</h2>
                     
                     <div class="author-row">
-                        <div class="author-icon">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <div class="author-badge">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                                 <circle cx="12" cy="7" r="4" />
                             </svg>
@@ -96,13 +110,16 @@
                     </div>
 
                     <div class="quality-section">
-                        <label for="quality-select" class="field-label">选择导出画质 / 格式</label>
+                        <div class="section-subhead">
+                            <span class="field-label">导出规格与清晰度</span>
+                            <span id="quality-hint" class="quality-hint">自动优选最高码率</span>
+                        </div>
                         <div class="select-wrapper">
                             <select id="quality-select" class="custom-select">
-                                <!-- Populated dynamically -->
+                                <!-- Dynamically populated -->
                             </select>
                             <div class="select-arrow">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="6 9 12 15 18 9" />
                                 </svg>
                             </div>
@@ -110,7 +127,7 @@
                     </div>
 
                     <button id="btn-download" class="btn btn-download">
-                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                             <polyline points="7 10 12 15 17 10" />
                             <line x1="12" y1="15" x2="12" y2="3" />
@@ -124,60 +141,130 @@
             <section class="card tasks-card">
                 <div class="card-header">
                     <div class="title-with-badge">
-                        <span class="section-label">下载任务</span>
+                        <span class="section-label">下载队列</span>
                         <span id="task-count" class="counter-badge">0</span>
                     </div>
                 </div>
                 <div id="task-list" class="task-list">
                     <div class="empty-state">
                         <div class="empty-icon">
-                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
                                 <line x1="8" y1="21" x2="16" y2="21" />
                                 <line x1="12" y1="17" x2="12" y2="21" />
                             </svg>
                         </div>
-                        <p class="empty-title">队列暂无任务</p>
-                        <p class="empty-desc">解析视频后选择心仪画质，即可一键下载到相册</p>
+                        <p class="empty-title">队列空闲</p>
+                        <p class="empty-desc">解析链接并选择清晰度后，点击下载即可后台高速保存</p>
                     </div>
                 </div>
             </section>
         </main>
 
-        <!-- QR Code Login Modal -->
-        <div id="qr-modal" class="modal hidden">
-            <div class="modal-backdrop"></div>
-            <div class="modal-card">
-                <div class="modal-header">
-                    <div class="modal-title-group">
-                        <h3 class="modal-title">哔哩哔哩扫码登录</h3>
-                        <p class="modal-subtitle">登录后可解锁 4K、1080P60 等大会员原画画质</p>
+        <!-- Modern Login Bottom Sheet Modal -->
+        <div id="login-modal" class="modal-sheet-backdrop hidden">
+            <div class="modal-sheet">
+                <!-- Sheet Drag Pill -->
+                <div class="sheet-handle"></div>
+
+                <div class="sheet-header">
+                    <div class="sheet-title-box">
+                        <h3 class="sheet-title">哔哩哔哩账号授权</h3>
+                        <p class="sheet-desc">同步会员画质权限，解锁 4K、1080P60 等原画流</p>
                     </div>
-                    <button id="btn-close-modal" class="close-btn" aria-label="关闭">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <button id="btn-close-modal" class="sheet-close-btn" aria-label="关闭">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18" />
                             <line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                     </button>
                 </div>
 
-                <div class="modal-body">
-                    <div class="qr-wrapper">
-                        <img id="qr-image" class="qr-image" src="" alt="登录二维码">
-                        <div id="qr-loading" class="qr-loading">
-                            <span class="spinner"></span>
-                            <span>生成登录码中...</span>
+                <!-- Segmented Tabs -->
+                <div class="tab-segment">
+                    <button id="tab-web-login" class="tab-btn active">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <line x1="3" y1="9" x2="21" y2="9" />
+                            <line x1="9" y1="21" x2="9" y2="9" />
+                        </svg>
+                        <span>内置网页登录 (推荐)</span>
+                    </button>
+                    <button id="tab-qr-login" class="tab-btn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" />
+                            <rect x="14" y="3" width="7" height="7" />
+                            <rect x="14" y="14" width="7" height="7" />
+                            <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        <span>客户端扫码</span>
+                    </button>
+                </div>
+
+                <!-- Tab Content 1: Web Login (Recommended) -->
+                <div id="view-web-login" class="tab-view">
+                    <div class="web-login-banner">
+                        <div class="banner-icon">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                                <line x1="12" y1="18" x2="12.01" y2="18" />
+                            </svg>
+                        </div>
+                        <div class="banner-text">
+                            <h4>手机本地直接授权</h4>
+                            <p>无需准备第二台设备或对准屏幕。在内置弹窗中输入验证码或密码登录，成功后全自动绑定大会员权限。</p>
                         </div>
                     </div>
 
-                    <div id="qr-status" class="qr-status">请打开 哔哩哔哩手机客户端 扫码确认</div>
-                    
-                    <button id="btn-refresh-qr" class="btn btn-secondary btn-sm">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <button id="btn-start-web-login" class="btn btn-primary btn-sheet-cta">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                            <polyline points="10 17 15 12 10 7" />
+                            <line x1="15" y1="12" x2="3" y2="12" />
+                        </svg>
+                        <span>启动内置网页登录</span>
+                    </button>
+
+                    <p class="privacy-note">🔒 账号凭证仅保存在本机私有安全沙盒中，绝不上传任何云端。</p>
+                </div>
+
+                <!-- Tab Content 2: QR Login -->
+                <div id="view-qr-login" class="tab-view hidden">
+                    <div class="qr-box">
+                        <img id="qr-image" class="qr-image hidden" src="" alt="登录二维码">
+                        <div id="qr-loading" class="qr-loading">
+                            <span class="spinner"></span>
+                            <span>生成安全登录码...</span>
+                        </div>
+                    </div>
+
+                    <div id="qr-status" class="qr-status">请使用哔哩哔哩手机端识别</div>
+
+                    <div class="qr-actions-row">
+                        <button id="btn-save-qr" class="btn btn-secondary btn-sm">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            <span>保存二维码到相册</span>
+                        </button>
+                        <button id="btn-open-bili" class="btn btn-secondary btn-sm">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                            <span>打开B站扫码</span>
+                        </button>
+                    </div>
+
+                    <button id="btn-refresh-qr" class="refresh-link">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="23 4 23 10 17 10" />
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                         </svg>
-                        <span>刷新二维码</span>
+                        <span>刷新登录码</span>
                     </button>
                 </div>
             </div>

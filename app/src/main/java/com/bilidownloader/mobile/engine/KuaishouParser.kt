@@ -1,5 +1,6 @@
 package com.bilidownloader.mobile.engine
 
+import com.bilidownloader.mobile.util.*
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
@@ -13,8 +14,8 @@ object KuaishouParser {
     private const val MOBILE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(18, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -68,13 +69,13 @@ object KuaishouParser {
             if (dataM.find()) {
                 val jsonStr = dataM.group(1)
                 try {
-                    val root = gson.fromJson(jsonStr, JsonObject::class.java)
-                    val photo = root.getAsJsonObject("video")
+                    val root = jsonStr.parseAsJsonObject()
+                    val photo = root.obj("video")
                     if (photo != null) {
-                        title = photo.get("caption")?.asString ?: title
-                        author = photo.get("userName")?.asString ?: author
-                        coverUrl = photo.get("poster")?.asString ?: ""
-                        videoUrl = photo.get("srcNoMark")?.asString ?: photo.get("photoUrl")?.asString
+                        title = photo.str("caption") ?: title
+                        author = photo.str("userName") ?: author
+                        coverUrl = photo.str("poster") ?: ""
+                        videoUrl = photo.str("srcNoMark") ?: photo.str("photoUrl")
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
