@@ -23,11 +23,14 @@
 
 ## 📦 直接下载安装包 (APK)
 
-最新已打包好的 APK 安装包已自动发布到 GitHub Releases：
+最新已打包好的 APK 安装包已自动编译并发布：
 
-👉 **[点击直接前往下载最新 APK (GitHub Releases)](https://github.com/3348940262zby-afk/bili-downloader-mobile/releases)**
+- 🚀 **[点击一键直接下载最新 APK 安装包 (BiliDownloaderMobile.apk)](https://github.com/3348940262zby-afk/bili-downloader-mobile/releases/latest/download/BiliDownloaderMobile.apk)**
+- 🏷️ **[前往 GitHub Releases 查看所有版本与更新日志](https://github.com/3348940262zby-afk/bili-downloader-mobile/releases)**
 
-手机浏览器打开上述链接，在最新版本的 **Assets** 展开列表中点击 **`BiliDownloaderMobile.apk`** 即可直接下载并安装到手机。
+> 💡 **安装提示**：
+> 1. 手机自带浏览器或第三方浏览器打开上方直接下载链接即可开始下载。
+> 2. 安装时若系统弹出“未知来源应用”或“未识别的开发者”，此为标准自签名安装包正常提示，点击 **“继续安装”** 或 **“仍要安装”** 即可。
 
 ---
 
